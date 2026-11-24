@@ -1,0 +1,31 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+coverage/
+*.tsbuildinfo
+
+# local state and logs
+.env
+.env.*
+*.log
+logs/
+previews/
+tmp/
+
+# tooling snapshots
+.playwright-mcp/
+.opencode/
+
+# packaging
+*.zxp
+*.mcpb
+
+# font binaries (SpacePixi is referenced from the system font directory)
+assets/fonts/*.ttf
+assets/fonts/*.otf
+
+# OS
+.DS_Store
+Thumbs.db

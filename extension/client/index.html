@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>offhand</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="panel">
+      <header class="header">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span class="brand-name">offhand</span>
+          <span class="brand-version" id="version">0.1.0</span>
+        </div>
+        <div class="connection" id="connection" data-state="waiting">
+          <span class="dot" aria-hidden="true"></span>
+          <span id="connection-text">Waiting for server</span>
+        </div>
+      </header>
+
+      <section class="card" aria-label="Connection details">
+        <div class="row">
+          <span class="label">Bridge</span>
+          <span class="value" id="bridge">—</span>
+        </div>
+        <div class="row">
+          <span class="label">After Effects</span>
+          <span class="value" id="ae">—</span>
+        </div>
+        <div class="row">
+          <span class="label">Project</span>
+          <span class="value" id="project">—</span>
+        </div>
+        <div class="row">
+          <span class="label">Active comp</span>
+          <span class="value" id="comp">—</span>
+        </div>
+        <div class="row">
+          <span class="label">Playhead</span>
+          <span class="value" id="playhead">—</span>
+        </div>
+      </section>
+
+      <section class="actions">
+        <button type="button" id="reconnect">Reconnect</button>
+        <button type="button" id="copy-config">Copy MCP config</button>
+      </section>
+
+      <p class="hint">
+        Keep this panel open while your agent works. Closing it disconnects the bridge.
+      </p>
+
+      <section class="log-wrap" aria-label="Activity log">
+        <div class="log-head">
+          <span>Activity</span>
+          <button type="button" class="link" id="clear-log">Clear</button>
+        </div>
+        <ol class="log" id="log" aria-live="polite"></ol>
+      </section>
+    </main>
+    <script src="panel.js"></script>
+  </body>
+</html>
