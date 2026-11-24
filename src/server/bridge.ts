@@ -92,6 +92,8 @@ export class Bridge extends EventEmitter {
       const onListening = () => {
         cleanup();
         this.actualPort = (server.address() as AddressInfo).port;
+        // Keep a listener for runtime errors; an unhandled 'error' event would crash the MCP server.
+        server.on('error', (error) => logInfo(`bridge server error: ${error.message}`));
         resolve();
       };
 
@@ -189,13 +191,9 @@ export class Bridge extends EventEmitter {
       this.authTimer = null;
     }
 
-    for (const [id, pending] of this.pending) {
-      clearTimeout(pending.timer);
-      pending.reject(
-        new OffhandError('BRIDGE_DISCONNECTED', 'The offhand server stopped before the call completed.'),
-      );
-      this.pending.delete(id);
-    }
+    this.rejectPending(
+      () => new OffhandError('BRIDGE_DISCONNECTED', 'The offhand server stopped before the call completed.'),
+    );
 
     if (this.socket) {
       try {
@@ -217,6 +215,14 @@ export class Bridge extends EventEmitter {
     this.actualPort = null;
   }
 
+  private rejectPending(makeError: (pending: PendingCall) => OffhandError): void {
+    for (const [id, pending] of this.pending) {
+      clearTimeout(pending.timer);
+      pending.reject(makeError(pending));
+      this.pending.delete(id);
+    }
+  }
+
   private handleConnection(socket: WebSocket, request: { headers: { origin?: string } }): void {
     const origin = request.headers.origin;
     if (origin && !LOCAL_ORIGIN.test(origin)) {
@@ -225,8 +231,25 @@ export class Bridge extends EventEmitter {
       return;
     }
 
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      this.socket.close(4001, 'Replaced by a newer panel connection');
+    if (this.socket) {
+      this.rejectPending(
+        (pending) =>
+          new OffhandError(
+            'BRIDGE_DISCONNECTED',
+            `The After Effects panel was replaced while "${pending.tool}" was running.`,
+            { hint: 'Check After Effects before retrying. The older panel can no longer answer.' },
+          ),
+      );
+      try {
+        this.socket.close(4001, 'Replaced by a newer panel connection');
+      } catch {
+        // Ignore close races.
+      }
+    }
+
+    if (this.authTimer) {
+      clearTimeout(this.authTimer);
+      this.authTimer = null;
     }
 
     this.socket = socket;
@@ -248,6 +271,8 @@ export class Bridge extends EventEmitter {
   }
 
   private handleMessage(socket: WebSocket, data: RawData): void {
+    if (socket !== this.socket) return;
+
     let message: PanelToServerMessage;
     try {
       message = JSON.parse(data.toString()) as PanelToServerMessage;
@@ -366,17 +391,16 @@ export class Bridge extends EventEmitter {
     this.panelVersion = null;
     this.ae = null;
 
-    for (const [id, pending] of this.pending) {
-      clearTimeout(pending.timer);
-      pending.reject(
+    this.rejectPending(
+      (pending) =>
         new OffhandError(
           'BRIDGE_DISCONNECTED',
           `The After Effects panel disconnected while "${pending.tool}" was running.`,
-          { hint: 'Reopen Window > Extensions > offhand. If the operation was a render, check After Effects before retrying.' },
+          {
+            hint: 'Reopen Window > Extensions > offhand. If the operation was a render, check After Effects before retrying.',
+          },
         ),
-      );
-      this.pending.delete(id);
-    }
+    );
 
     logInfo('panel disconnected');
     this.emit('offline');
