@@ -82,10 +82,10 @@ Notes:
 - `result` is JSON-serialized; cycles become `"<cycle>"`.
 - Use `execute` to discover a missing tool, then open an issue or add the typed tool.
 
-## Planned tools
+## Typed tools
 
-These are the next phase. The input shapes are intentionally concrete so the host and server can be
-implemented without redesigning the surface.
+All typed tools are live and map directly to handlers in `extension/host/tools/`. Write tools
+automatically run inside one After Effects undo group.
 
 ### `project`
 

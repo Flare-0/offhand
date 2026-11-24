@@ -3,7 +3,18 @@ var Offhand = typeof Offhand !== "undefined" ? Offhand : {};
 if (!Offhand.loaded) {
   Offhand.version = "0.1.0";
   Offhand.tools = {};
-  Offhand.writeTools = { execute: true };
+  Offhand.writeTools = {
+    comp: true,
+    layer: true,
+    property: true,
+    effect: true,
+    text: true,
+    shape: true,
+    mask: true,
+    render: true,
+    assets: true,
+    execute: true,
+  };
 
   Offhand.root = (function () {
     try {
@@ -25,6 +36,17 @@ if (!Offhand.loaded) {
   Offhand.include("core/json.jsx");
   Offhand.include("core/util.jsx");
   Offhand.include("tools/status.jsx");
+  Offhand.include("tools/project.jsx");
+  Offhand.include("tools/comp.jsx");
+  Offhand.include("tools/layer.jsx");
+  Offhand.include("tools/property.jsx");
+  Offhand.include("tools/effect.jsx");
+  Offhand.include("tools/text.jsx");
+  Offhand.include("tools/shape.jsx");
+  Offhand.include("tools/mask.jsx");
+  Offhand.include("tools/render.jsx");
+  Offhand.include("tools/assets.jsx");
+  Offhand.include("tools/view.jsx");
   Offhand.include("tools/execute.jsx");
 
   Offhand.dispatch = function (tool, argsJson) {

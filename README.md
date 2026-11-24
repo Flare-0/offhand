@@ -14,9 +14,9 @@
 
 ## Status
 
-Early build. The local bridge, CEP panel, `status`, `docs`, and the `execute` escape hatch are
-implemented. Typed composition, layer, property, effect, text, shape, mask, render, asset, and view
-tools are the next phase.
+All 14 MCP tools are implemented: the local bridge, CEP panel, `status`, `docs`, `project`, `comp`,
+`layer`, `property`, `effect`, `text`, `shape`, `mask`, `render`, `assets`, `view`, and the
+`execute` escape hatch.
 
 ## Why
 
@@ -101,18 +101,18 @@ npm run doctor
 | --- | --- | --- |
 | `status` | Live | Bridge, project, active comp, playhead, selection. |
 | `docs` | Live | Search the bundled AE scripting and expression reference. |
+| `project` | Live | List, open, save, and inspect project items. |
+| `comp` | Live | Create, update, and inspect compositions. |
+| `layer` | Live | List, create, update, duplicate, reorder, and delete layers. |
+| `property` | Live | Get/set values, keyframes, and expressions by path. |
+| `effect` | Live | Search, add, configure, and remove effects. |
+| `text` | Live | Create and edit text layers. |
+| `shape` | Live | Create and edit shape layers. |
+| `mask` | Live | Create, configure, and remove masks. |
+| `render` | Live | Preview frames and queue renders. |
+| `assets` | Live | Import, organize, replace, and remove footage. |
+| `view` | Live | Open comps, set the playhead, and select layers. |
 | `execute` | Live | Last-resort ExtendScript. Requires a reason. |
-| `project` | Next | List, open, save, and inspect project items. |
-| `comp` | Next | Create and inspect compositions. |
-| `layer` | Next | List, select, create, and update layers. |
-| `property` | Next | Get/set values, keyframes, and expressions by path. |
-| `effect` | Next | Add, configure, reorder, and remove effects. |
-| `text` | Next | Create and edit text layers. |
-| `shape` | Next | Create and edit shape layers. |
-| `mask` | Next | Create and edit masks. |
-| `render` | Next | Preview frames and queue renders. |
-| `assets` | Next | Import, relink, and replace footage. |
-| `view` | Next | Open comps, set the playhead, and focus the viewer. |
 
 See [docs/tools.md](docs/tools.md) for schemas and examples.
 
