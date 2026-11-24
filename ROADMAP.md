@@ -8,8 +8,9 @@ A clear breakdown of what is built, what is verified, and what still needs to be
 
 - **Version:** `0.1.0`
 - **Repository:** `D:\Projects\offhand` (`git@flare:Flare-0/offhand.git`, `main` branch)
-- **Build & Checks:** `npm run typecheck`, `npm test` (3 files, 13 tests), `npm run lint`, and `npm run build` all pass.
-- **Live After Effects Testing:** Not yet run against a live After Effects instance. TypeScript, Zod schemas, bridge tests, and docs tests are verified; ExtendScript (`.jsx`) handlers are written in ES3 and need live smoke-testing inside AE.
+- **Build & Checks:** `npm run typecheck`, `npm test` (4 files, 17 tests), `npm run lint`, and `npm run build` all pass.
+- **CEP & MCP Setup:** CEP panel installed (`C:\Users\Muaj\AppData\Roaming\Adobe\CEP\extensions\com.offhand.panel`), `PlayerDebugMode` enabled, and Antigravity `mcp_config.json` configured (`node D:/Projects/offhand/dist/cli.js`).
+- **Live After Effects Testing:** Ready to test in a new Antigravity conversation with After Effects open (`Window → Extensions → offhand`).
 
 ---
 
@@ -24,6 +25,7 @@ A clear breakdown of what is built, what is verified, and what still needs to be
   - `tests/bridge.test.ts` (4 tests) — bridge handshake, calls, disconnect handling
   - `tests/docs.test.ts` (6 tests) — bundled AE docs search & lookup
   - `tests/tools.test.ts` (3 tests) — all 14 tools registered, matching `.jsx` files present, Zod schema validation
+  - `tests/execute.test.ts` (4 tests) — unsafe ExtendScript sanitization (`system.callSystem`, `ExternalObject`, `Socket`, `BridgeTalk`, `.execute()`, `$.evalFile`, `eval`, `app.quit`, file writes)
 
 ### Bundled Docs (`src/server/data/ae-docs.ts`)
 - Searchable reference for core AE scripting/expression APIs (`docs` tool works offline without AE).
