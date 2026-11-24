@@ -5,6 +5,30 @@ Offhand.tools.execute = function (args) {
     Offhand.util.fail("INVALID_ARGS", "script is required.", "Pass the ExtendScript source in script.");
   }
 
+  var cleaned = args.script.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\r\n]*/g, " ");
+  var blocked = [
+    /\bsystem\s*\.\s*callSystem\b|\bcallSystem\s*\(/i,
+    /\bExternalObject\b/,
+    /\bSocket\b/,
+    /\bBridgeTalk\b/,
+    /\.\s*execute\s*\(/,
+    /\$\s*\.\s*evalFile\s*\(/,
+    /\$\s*\.\s*setenv\s*\(/,
+    /\bapp\s*\.\s*(?:exit|quit)\s*\(/,
+    /\bapp\s*\.\s*project\s*\.\s*close\s*\(/,
+    /\beval\s*\(|\bnew\s+Function\s*\(/,
+    /\.\s*open\s*\(\s*['"][wae]/i,
+  ];
+  for (var i = 0; i < blocked.length; i += 1) {
+    if (blocked[i].test(cleaned)) {
+      Offhand.util.fail(
+        "INVALID_ARGS",
+        "Blocked unsafe ExtendScript operation.",
+        "Use typed tools instead of system, file-write, socket, or eval APIs.",
+      );
+    }
+  }
+
   var result;
   try {
     result = eval(args.script);
