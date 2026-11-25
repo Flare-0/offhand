@@ -426,11 +426,23 @@ Key conventions (from `docs/tools.md`):
 
 ## Git workflow
 
+`main` is protected by the owner's rulesets: no deletes, no force-pushes, and changes need a pull
+request whose `test` status check passes. Direct pushes land through an admin bypass and print
+`Bypassed rule violations`, so use the PR flow instead:
+
 ```powershell
+git switch -c <type>/<short-slug>
 git add <files>
 git commit -m "<type>: <description>"
-git push    # pushes to git@flare:Flare-0/offhand.git via SSH alias
+git push -u origin <type>/<short-slug>
+gh pr create --fill            # or --title/--body
+gh run watch                   # wait for the `test` check
+gh pr merge --squash
+git switch main; git pull --ff-only
 ```
+
+The required-review rule is intentionally at 0 on this solo repo, so a green PR merges without an
+admin override. Merge branches with `--delete-branch` if you want them cleaned up.
 
 Commit types: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`.
 

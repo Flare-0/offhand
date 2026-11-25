@@ -166,9 +166,11 @@ bundle; expected `eval` warnings from `core/json.ts` and `tools/execute.ts`).
 - `%APPDATA%\offhand` holds `token`, `bridge.json`, `settings.json`, `logs/usage.jsonl`. A stale token from
   another install causes `TOKEN_MISMATCH`; deleting that one file (or re-running the installer) fixes it.
 - Dataset paths are per-user; nothing is installed system-wide, no services or scheduled tasks.
-- **`main` is protected by a ruleset** (owner-enabled): changes are expected through a pull request and the
-  `test` status check. A direct `git push` to `main` by the repo owner still lands, but prints
-  `Bypassed rule violations`. Prefer a short-lived branch → PR → merge so CI gates the change.
+- **`main` is protected by two owner rulesets**: `main-1` (no deletion, no force-push) and `main-2`
+  (pull request + the `test` status check). The required approving review was lowered to **0** on
+  2026-11-25 because the repo is solo, so a green PR merges normally. Work flow: branch → PR → wait for
+  `test` → `gh pr merge --squash`. A direct push still lands via the admin bypass, but prints
+  `Bypassed rule violations` and skips the gate.
 - Desired repo topics (blocked earlier by the GitHub incident):
   `gh repo edit Flare-0/offhand --add-topic mcp --add-topic after-effects --add-topic adobe --add-topic extendscript --add-topic cep --add-topic ai --add-topic automation --add-topic nodejs`
 
