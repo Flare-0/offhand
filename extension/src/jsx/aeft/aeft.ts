@@ -1,33 +1,35 @@
 // The single ExtendScript entry point the panel calls via `evalTS()`.
 //
-// Until Phase D ports the host to typed modules, this delegates to the legacy
-// ES3 bundle that vite copies to `dist/cep/host/offhand.jsx`. Path resolution:
-// this file becomes `dist/cep/jsx/index.js`, so `parent.parent` is `dist/cep`.
+// Phase D moved the handlers into `src/jsx` (bundled into `jsx/index.js`), so
+// this normally runs entirely in-process. The legacy ES3 host is kept as a
+// safety net: if a tool somehow did not register, we fall back to
+// `dist/cep/host/offhand.jsx` instead of failing the call.
 
-export const dispatch = (tool: string, argsJson: string): string => {
+import { dispatch as dispatchHost } from "../host";
+
+const legacyDispatch = (tool: string, argsJson: string): string | null => {
   try {
     const self = new File($.fileName);
     const root = self.parent.parent.fsName;
     const hostFile = new File(root + "/host/offhand.jsx");
-
-    if (!hostFile.exists) {
-      return JSON.stringify({
-        ok: false,
-        error: {
-          code: "HOST_UNAVAILABLE",
-          message: "The offhand host scripts are missing from the extension.",
-          hint: "Rebuild the extension with `npm run build:extension`.",
-        },
-      });
-    }
+    if (!hostFile.exists) return null;
 
     // @ts-ignore - global installed by extension/host/offhand.jsx
     if (typeof Offhand === "undefined" || !Offhand.loaded) {
       $.evalFile(hostFile);
     }
-
     // @ts-ignore
     return Offhand.dispatch(tool, argsJson);
+  } catch (error) {
+    return null;
+  }
+};
+
+export const dispatch = (tool: string, argsJson: string): string => {
+  try {
+    const result = dispatchHost(tool, argsJson);
+    if (result.indexOf('"UNKNOWN_TOOL"') === -1) return result;
+    return legacyDispatch(tool, argsJson) ?? result;
   } catch (error) {
     return JSON.stringify({
       ok: false,

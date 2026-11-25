@@ -1,0 +1,44 @@
+// Shared mutable host namespace.
+//
+// The original ES3 host was a set of globals (`Offhand.tools.status = ...`).
+// Phase D turns each file into a module while deliberately keeping those proven
+// bodies intact: every module imports this same object and registers into it.
+// That keeps the port mechanical and reviewable, and the bundler still emits
+// one ES3 file loaded by `InitBolt`. Types are tightened per handler over time.
+
+export type OffhandErrorPayload = {
+  code: string;
+  message: string;
+  hint?: string;
+};
+
+export type HostHandler = (args: any) => any;
+
+export type OffhandState = {
+  version: string;
+  tools: Record<string, HostHandler>;
+  /** Tools wrapped in a single undo group by the dispatcher. */
+  writeTools: Record<string, boolean>;
+  json: any;
+  util: any;
+  loaded?: boolean;
+};
+
+export const Offhand: OffhandState = {
+  version: "0.1.0",
+  tools: {},
+  writeTools: {
+    comp: true,
+    layer: true,
+    property: true,
+    effect: true,
+    text: true,
+    shape: true,
+    mask: true,
+    render: true,
+    assets: true,
+    execute: true,
+  },
+  json: undefined,
+  util: undefined,
+};

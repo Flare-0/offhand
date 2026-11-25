@@ -126,17 +126,34 @@ bridge architecture is being **flipped**. Everything in "Rewrite plan" below is 
       - `tests/bridge.test.ts` covers the flag arriving in `welcome` and following an `event`.
       - Rebuild required for the panel to pick this up (`npm run build:extension`, then reload the
         panel from its flyout menu or restart AE).
-- [ ] **D. Host port** — `extension/host/**/*.jsx` → `extension/src/jsx/**/*.ts` with `evalTS`
-      wiring; undo groups preserved.
+- [x] **D. Host port** — `extension/host/**/*.jsx` → `extension/src/jsx/**/*.ts` with `evalTS`
+      wiring; undo groups preserved. **Done (build green; live reload pending).**
+      - `src/jsx/core/state.ts` is the shared mutable host namespace (`Offhand.tools`,
+        `writeTools`, `json`, `util`). Every ported file imports it and registers into it, so the
+        proven handler bodies moved over unchanged — the port is mechanical, not a rewrite.
+      - Ported: `core/json.ts`, `core/util.ts`, and all 14 tools under `src/jsx/tools/`
+        (`assets, comp, effect, execute, layer, mask, project, property, render, shape, status,
+        text, view`).
+      - `src/jsx/host.ts` is the single dispatcher: JSON args → handler → `{ok,data}` /
+        `{ok:false,error}`, one `beginUndoGroup`/`endUndoGroup` around every write tool, and
+        `INVALID_JSON` / `UNKNOWN_TOOL` / `HOST_ERROR` handling preserved from the ES3 original.
+      - `src/jsx/aeft/aeft.ts` calls the bundled dispatcher; if a tool somehow reports
+        `UNKNOWN_TOOL` it falls back to `dist/cep/host/offhand.jsx`, so a missed registration can
+        never strand a call.
+      - ES3 safety checked in the built `dist/cep/jsx/index.js` (~100 KB): no `=>`, `??`, `?.`,
+        `let`/`const`; no ES5 builtins introduced by the new code (`map`/`forEach`/`Object.keys`/
+        `Array.isArray`/`trim`). Babel + the ponyfill plugin emit ES3.
+      - `tests/tools.test.ts`'s "matching `.jsx` exists" check still passes: the legacy
+        `extension/host/` tree stays in the repo (not deleted) as the fallback, per the phase-A rule.
 - [ ] **E. Tool surface** — layer IDs, write diffs, `batch`, `detail`, render jobs, execute promotion.
 - [ ] **F. Testability** — fake panel, mock AE object model, eval task set.
 - [ ] **G. Security/install** — `offhand install`, `offhand doctor --fix`, audit-log surfacing.
       (The raw-script toggle landed early, in Phase C.)
 - [ ] **H. Docs + live AE verification** — README, `docs/*`, smoke test in AE 2023, then npm publish.
 
-> **Phase C done 2026-11-25**: `typecheck`, 24 tests (5 files), `lint`, root `build` and
-> `npm --prefix extension run build` all green. Live reload of the panel not yet re-run.
-> Next up is Phase D (port the ES3 host to `src/jsx`).
+> **Phase D done 2026-11-25**: host ported into `src/jsx` (build green: 44 modules, jsx bundle
+> ~100 KB, handlers verified present). Root `typecheck`, 24 tests, `lint` green. Live reload of the
+> panel to exercise the new bundle still pending. Next up is Phase E (tool surface).
 > Note: `offhand-mcp` is **not on npm** (`npm view` → 404), so MCP clients must launch
 > `node D:/Projects/offhand/dist/cli.js` until Phase H publishes it. Restarting the client after a
 > rebuild is required — an MCP server keeps running the code it was started with.

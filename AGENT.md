@@ -167,7 +167,35 @@ must run `node D:/Projects/offhand/dist/cli.js`. The panel's "Copy MCP config" b
 `npx -y offhand-mcp` form for after Phase H. Also: after rebuilding `dist/cli.js`, the MCP client must
 be restarted (in OpenCode, remove + re-add the server entry) — it keeps running the old code otherwise.
 
-**Next phase: C — finish the panel UI** (raw-scripts toggle, richer comp detail).
+### ✅ Phase D done (2026-11-25) — host ported into `src/jsx`
+
+The ExtendScript host now ships inside the bolt-cep bundle instead of a hand-copied ES3 tree.
+
+- `extension/src/jsx/core/state.ts` — shared mutable namespace (`Offhand.tools`, `writeTools`,
+  `json`, `util`). Each ported module imports it and registers into it, so the proven ES3 handler
+  bodies moved over **unchanged**; the port was mechanical, not a rewrite. Tighten types per handler
+  as you touch them.
+- Ported files: `core/json.ts`, `core/util.ts`, and `tools/{assets,comp,effect,execute,layer,mask,
+  project,property,render,shape,status,text,view}.ts`.
+- `extension/src/jsx/host.ts` — the single dispatcher: parse args → handler → `{ok,data}` or
+  `{ok:false,error}`; one `beginUndoGroup`/`endUndoGroup` around every tool in `writeTools`; keeps
+  `INVALID_JSON`, `UNKNOWN_TOOL` and `HOST_ERROR` behaviour.
+- `extension/src/jsx/aeft/aeft.ts` — exports `dispatch` → bundled dispatcher. If it ever returns
+  `UNKNOWN_TOOL`, it retries `dist/cep/host/offhand.jsx`, so a missed registration can't strand a
+  call. **The legacy `extension/host/` tree is still in the repo** (not deleted, per the phase-A
+  rule) and is still copied into `dist/cep/host/` by `vite.plugin.host.ts` — that copy is now only
+  the fallback, and can be removed in a later phase once live verification is done.
+- ES3: verified in the built bundle — no `=>`, `??`, `?.`, `let`/`const`; no ES5 builtins added by
+  the new modules. Babel + ponyfills emit ES3. Bundle is `dist/cep/jsx/index.js` (~100 KB) and the
+  build log shows `44 modules transformed`.
+- `tests/tools.test.ts` still passes because the legacy `.jsx` files remain.
+
+**Checks:** root `typecheck`, `npm test` (5 files / 24 tests), `lint`; extension `build` green.
+**Live reload not yet observed** — the panel evaluates the jsx bundle once, so reload the panel from
+its flyout menu (or restart AE) before trusting the ported handlers in AE.
+
+**Next phase: E — tool surface** (stable layer IDs, write diffs, `batch`, `detail`, render jobs,
+`execute` promotion).
 
 ---
 
@@ -325,15 +353,22 @@ Offhand.tools.my_tool = function (args) {
 };
 ```
 
-If it's a write tool, add it to `Offhand.writeTools` in `offhand.jsx`:
-```js
-Offhand.writeTools = { execute: true, my_tool: true };
+If it's a write tool, add it to `Offhand.writeTools` in `extension/src/jsx/core/state.ts`
+(that object is the single source — the dispatcher no longer lives in a `.jsx` file):
+
+```ts
+writeTools: { execute: true, my_tool: true },
 ```
 
-Then `$.evalFile` it in `offhand.jsx`:
-```js
-Offhand.include('tools/my_tool.jsx');
+Then register the module for its side effect in `extension/src/jsx/host.ts`:
+
+```ts
+import "./tools/my_tool";
 ```
+
+> Phase D moved the host into `src/jsx`. `extension/host/**/*.jsx` is legacy fallback only — do not
+> add new handlers there. Keep new host code ES3 at runtime (no `Array.prototype.map`, `Object.keys`,
+> `trim`, arrow functions, template literals); Babel handles syntax, not missing builtins.
 
 ### 3. Document it in `docs/tools.md`
 
@@ -411,15 +446,14 @@ Tests live in `tests/`. They test the TypeScript layer only — no AE or CEP nee
 
 ## What to do next (suggested order)
 
-1. **Implement `project` tool** — info, comps, items, open, save. Both TS and JSX. Easiest starting point; no layer/property complexity.
-2. **Implement `comp` tool** — list, get, create, set.
-3. **Implement `layer` tool** — list, get, create (text/solid/null), set, delete.
-4. **Implement `property` tool** — get, set, keyframe, expression. This needs `Offhand.util.property(layer, path)` helper.
-5. **Implement `effect` tool** — list, search (curated match-name map), add, set, remove.
-6. **Implement `text` and `shape` tools** — depend on layer and property.
-7. **Implement `mask` tool**.
-8. **Implement `render` tool** — `frame` (saveFrameToPng), `queue` (add to render queue), `status`.
-9. **Implement `assets` tool** — import, list, replace.
-10. **Implement `view` tool** — open, time (set playhead), select.
-11. Update `docs/tools.md` as each tool goes live.
-12. Add tests for server-side schemas and error paths.
+Phases A–D are done; the live plan is in [`ROADMAP.md`](ROADMAP.md) § *Rewrite phases*.
+
+1. **Live-check Phase D** — reload the panel (flyout → Reload) or restart AE, then run `status` and a
+   couple of writes through the new bundled host. If anything fails, the legacy `host/` fallback and
+   `dist/cep/host/` copy are still in place.
+2. **Phase E — tool surface** — stable layer IDs, write diffs, `batch`, `detail: min|full`, render
+   jobs, and promoting repeated `execute` patterns into typed tools.
+3. **Phase F — testability** — fake panel, mock AE object model, 10–20 task eval set.
+4. **Phase G — install/doctor** — `offhand install`, `offhand doctor --fix`, audit-log surfacing.
+5. **Phase H — docs + live verification + npm publish** — then switch the MCP config from
+   `node D:/Projects/offhand/dist/cli.js` to `npx -y offhand-mcp`.
