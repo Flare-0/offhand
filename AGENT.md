@@ -12,7 +12,48 @@ Repo: `git@flare:Flare-0/offhand.git` (private, SSH alias `flare` → github.com
 
 ---
 
+## ⚠️ ACTIVE WORK: bolt-cep rewrite (started 2026-11-25) — read this first
+
+The CEP extension is being **rewritten from scratch on bolt-cep** (React + Vite + TypeScript) and the
+bridge is being **flipped**. The full plan, decisions and rationale live in
+[`ROADMAP.md`](ROADMAP.md) § *ACTIVE: bolt-cep rewrite* — **read that section before coding.**
+
+### What changed in the plan
+- **Socket flips.** The panel (long-lived, in AE) will *host* the WebSocket and write `bridge.json`
+  with Node `fs`; the MCP stdio server (short-lived) will *dial in*. This removes `cep.fs` from the
+  config path entirely, which was the root cause of the "Waiting for server" dead-end.
+- **State machine** replaces the `connecting` boolean that made Reconnect a permanent no-op.
+- **ExtendScript moves to TS** under `extension/src/jsx/`, compiled to ES3 by bolt-cep, called via
+  `evalTS()` — killing the ES3 hand-writing burden and the TS/JSX drift.
+- Plus protocol deadlines, a `batch` tool, stable layer IDs, a fake panel + mock AE for CI, and a
+  panel-level "Allow raw scripts" toggle for `execute`.
+
+### Rules for this rewrite
+1. **Commit and push incrementally** — after every phase. AI usage can run out mid-session, so an
+   uncommitted phase is a lost phase. Update `ROADMAP.md` + `AGENT.md` in the same commit.
+2. Do **not** delete the legacy `extension/client` + `extension/host` code until the bolt-cep
+   equivalent builds and has been smoke-tested in AE.
+3. Target **AE 2023+** (`hosts: [{ name: "AEFT", version: "[23.0,99.9]" }]`) — bolt-cep's README says
+   2024+, but this project runs on After Effects 2023 (23.6).
+4. Keep the MCP server (`src/`) working at every commit; the panel rewrite must not break `npm test`.
+
+### bolt-cep
+- Repo: `https://github.com/hyperbrew/bolt-cep` (branch `master`). Scaffold logic is in
+  `create-bolt-cep/src/index.ts`.
+- A shallow clone may exist at `C:\Users\Muaj\AppData\Local\Temp\opencode\bolt-cep` — re-clone if gone.
+- Key files once scaffolded: `extension/cep.config.ts` (hosts/panels/parameters),
+  `extension/vite.config.ts` + `vite.es.config.ts` (panel build + ES3 rollup of `src/jsx`),
+  `extension/package.json` (from `package.react.jsonc`), `extension/tsconfig.json` (from
+  `tsconfig.react.json`).
+- `parameters` must keep `--enable-nodejs` and `--mixed-context` — the panel needs real `fs`/`net`.
+
+---
+
 ## Current state (session ended 2026-11-24 ~23:00)
+
+> ⚠️ **Stale section.** The tool table below says the 11 typed tools are stubs — that is wrong as of
+> commit `e64a770`. All 14 tools are implemented on **both** sides (TS + JSX) and tests pass
+> (4 files, 17 tests). See `ROADMAP.md` § *All 14 MCP Tools* for the accurate list.
 
 ### What is DONE and committed ✅
 
