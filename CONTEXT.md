@@ -83,6 +83,8 @@ Target: **After Effects 2023+** (`AEFT [23.0,99.9]`). Windows only in practice; 
 | D | ExtendScript host ported to `src/jsx` | `e3a8d3f` |
 | — | CI test fix | `71686ec` |
 | — | Release prep: installer, docs, changelog | `62472a4` |
+| — | `CONTEXT.md` handoff snapshot (this file) | `9ec6de0` |
+| — | Ruleset note + PR flow docs (PRs #9, #10) | `08b42b2`, `ba8168d` |
 
 Live-verified on **AE 2023 (23.6x62)**: bridge reaches `ready`; `status`, `project` and `comp` work through
 the full MCP → WS → panel queue → host chain. A second agent used the MCP successfully.
@@ -106,11 +108,13 @@ bundle; expected `eval` warnings from `core/json.ts` and `tools/execute.ts`).
   path but are unverified individually.
 - Layers are addressed by name/index only — no stable layer IDs yet.
 - No write diffs, no `batch` tool, no `detail: min|full`, no render jobs (all Phase E).
-- Repo topics were never applied (the Topics API was 500 during the incident). Desired:
-  `mcp, after-effects, adobe, extendscript, cep, ai, automation, nodejs`.
 - Phase D bundled host not yet re-verified live after a panel reload (legacy `dist/cep/host` fallback is
   still present, so a failure would be masked — check the log to confirm which host answered).
 - macOS untested. npm publish is Phase H.
+- Stale remote branch `docs/context-ruleset-note` (merged in #9) still exists; remove it only with the user's
+  consent, since that is a delete command.
+- CI annotates a Node 20 deprecation because `actions/checkout@v4` targets Node 20 on a Node 24 runner —
+  worth a chore bump.
 
 ---
 
@@ -119,12 +123,11 @@ bundle; expected `eval` warnings from `core/json.ts` and `tools/execute.ts`).
 1. **Live-check the Phase D host** — reload the panel (flyout → Reload) or restart AE, then run `status` and
    a couple of writes through the new bundled host. Confirm from the log that `src/jsx` answered, not the
    legacy fallback.
-2. **Re-apply repo topics** once the API is healthy (command in §7).
-3. **Phase E — tool surface:** stable layer IDs, write diffs, `batch`, `detail: min|full`, render jobs, and
+2. **Phase E — tool surface:** stable layer IDs, write diffs, `batch`, `detail: min|full`, render jobs, and
    promoting repeated `execute` patterns into typed tools.
-4. Phase F — testability: expand the fake panel, mock AE object model, a 10–20 task eval set.
-5. Phase G — `offhand install`, `offhand doctor --fix`, audit-log surfacing.
-6. Phase H — npm publish.
+3. Phase F — testability: expand the fake panel, mock AE object model, a 10–20 task eval set.
+4. Phase G — `offhand install`, `offhand doctor --fix`, audit-log surfacing.
+5. Phase H — npm publish.
 
 ---
 
@@ -171,8 +174,9 @@ bundle; expected `eval` warnings from `core/json.ts` and `tools/execute.ts`).
   2026-11-25 because the repo is solo, so a green PR merges normally. Work flow: branch → PR → wait for
   `test` → `gh pr merge --squash`. A direct push still lands via the admin bypass, but prints
   `Bypassed rule violations` and skips the gate.
-- Desired repo topics (blocked earlier by the GitHub incident):
-  `gh repo edit Flare-0/offhand --add-topic mcp --add-topic after-effects --add-topic adobe --add-topic extendscript --add-topic cep --add-topic ai --add-topic automation --add-topic nodejs`
+- Repo topics are applied: `mcp, after-effects, adobe, extendscript, cep, ai, automation, nodejs`
+  (`gh repo edit Flare-0/offhand --add-topic …`; this failed with HTTP 500 during the incident and succeeded
+  once it cleared).
 
 ---
 
