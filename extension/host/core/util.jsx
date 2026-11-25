@@ -658,6 +658,24 @@ Offhand.util =
         return { rgb: [rgb[0], rgb[1], rgb[2]], hex: rgbHex(rgb) };
       }
 
+      if (type === "layer") {
+        var targetLayer = prop.value;
+        return targetLayer ? { index: targetLayer.index, name: targetLayer.name } : null;
+      }
+
+      if (type === "mask") {
+        var targetMask = prop.value;
+        return targetMask ? { name: targetMask.name } : null;
+      }
+
+      if (type === "custom" || type === "unknown") {
+        try {
+          return String(prop.value);
+        } catch (customError) {
+          return null;
+        }
+      }
+
       return prop.value;
     }
 
@@ -744,9 +762,14 @@ Offhand.util =
         type: propertyType(prop),
       };
 
-      if (prop.canSetExpression) {
-        info.expression = prop.expression || "";
-        info.expressionEnabled = prop.expressionEnabled;
+      try {
+        if (prop.canSetExpression) {
+          info.expression = prop.expression || "";
+          info.expressionEnabled = prop.expressionEnabled;
+        }
+      } catch (expressionError) {
+        info.expression = "";
+        info.expressionEnabled = false;
       }
 
       if (info.type !== "group") {
