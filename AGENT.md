@@ -47,6 +47,51 @@ bridge is being **flipped**. The full plan, decisions and rationale live in
   `tsconfig.react.json`).
 - `parameters` must keep `--enable-nodejs` and `--mixed-context` — the panel needs real `fs`/`net`.
 
+### ✅ Phase A done (2026-11-25) — bolt-cep scaffold builds and loads in AE 2023
+
+What exists now:
+- `extension/` **is** a bolt-cep React project (`offhand-panel@0.1.0`, `"type": "module"`), with its
+  **own** `package.json` / `node_modules` (569 packages) — deliberately separate from the lean MCP
+  server deps at the repo root.
+- `extension/cep.config.ts` → `id: com.offhand.panel`, `displayName: offhand`, hosts
+  `[{ name: "AEFT", version: "[23.0,99.9]" }]`, `extensionManifestVersion: 7.0`,
+  `requiredRuntimeVersion: 9.0`, `parameters: ["--v=0","--enable-nodejs","--mixed-context"]`,
+  panel `name: "offhand"` (380×480), `installModules: ["ws"]`, `symlink: "local"`.
+- Build output: **`extension/dist/cep/`** — this folder *is* the CEP extension root
+  (`CSXS/manifest.xml`, `main/index.html`, `assets/*.cjs`, `jsx/index.js`, `node_modules/ws`).
+
+Commands:
+```powershell
+# repo root
+npm run build:extension        # → extension/dist/cep
+npm run install:cep            # copies dist/cep → %APPDATA%\Adobe\CEP\extensions\com.offhand.panel
+npm run install:cep -- --link # junction instead of copy (dev)
+npm run install:cep -- --uninstall
+
+# inside extension/ (bolt-cep's own flow)
+npm run build                  # rimraf dist && tsc -p tsconfig-build.json && vite build
+npm run symlink                # junction → %APPDATA%\Adobe\CEP\extensions\com.offhand.panel
+npm run dev                    # vite HMR for the panel
+```
+
+Verified live: the install was a **junction** (`extension/dist/cep`), AE 2023 (23.6) was launched and
+the **offhand panel loaded** (user-confirmed).
+
+Gotchas already hit — do not rediscover them:
+1. The *old* `com.offhand.panel` was a real directory, which made bolt-cep's symlink fail with
+   `EINVAL: invalid argument, readlink`. **Delete the target folder first**, then symlink.
+2. Copying the scaffold by hand (rather than `npx create-bolt-cep`) means the marker stripping is
+   yours to do: `src/js/main/index.html` must load `./index-react.tsx`, and `src/jsx/index.ts` must
+   not import the deleted `./ame/ame`, `./ppro/ppro`, … modules. Both broke the first build.
+3. The template's `./src/assets/light-icon.png` / `dark-icon.png` do not exist — copy them in
+   (`assets/icon-1024.png` works) or the manifest references dead icon paths. They still point at
+   `./src/assets/…` which is **not** copied into `dist/cep`, so AE currently shows a default icon.
+
+Still legacy / still in the repo: `extension/CSXS`, `extension/client`, `extension/host` — kept as
+the porting source for phases C and D (rule 2 above). The manifest in use is the generated one.
+
+**Next phase: B — flip the bridge** (panel hosts the WS server, MCP server dials in).
+
 ---
 
 ## Current state (session ended 2026-11-24 ~23:00)

@@ -33,6 +33,7 @@
   ],
   "scripts": {
     "build": "tsup",
+    "build:extension": "npm --prefix extension run build",
     "dev": "tsup --watch",
     "start": "node dist/cli.js",
     "typecheck": "tsc --noEmit",

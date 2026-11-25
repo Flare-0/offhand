@@ -6,7 +6,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const source = path.join(root, 'extension');
+// bolt-cep builds the extension into extension/dist/cep — that folder *is* the
+// CEP extension root (CSXS/manifest.xml, main/, assets/, jsx/, node_modules/).
+const source = path.join(root, 'extension', 'dist', 'cep');
 const userData = process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming');
 const extensionsDir = path.join(userData, 'Adobe', 'CEP', 'extensions');
 const target = path.join(extensionsDir, 'com.offhand.panel');
@@ -15,16 +17,17 @@ const flags = new Set(process.argv.slice(2));
 const link = flags.has('--link');
 const uninstall = flags.has('--uninstall');
 
-if (!fs.existsSync(path.join(source, 'CSXS', 'manifest.xml'))) {
-  console.error(`offhand: extension source not found at ${source}`);
-  process.exit(1);
-}
-
 if (uninstall) {
   fs.rmSync(target, { recursive: true, force: true });
   console.log(`Removed ${target}`);
   console.log('Restart After Effects to unload the panel.');
   process.exit(0);
+}
+
+if (!fs.existsSync(path.join(source, 'CSXS', 'manifest.xml'))) {
+  console.error(`offhand: built extension not found at ${source}`);
+  console.error('offhand: run `npm run build:extension` first, then retry.');
+  process.exit(1);
 }
 
 fs.mkdirSync(extensionsDir, { recursive: true });
@@ -48,7 +51,7 @@ console.log('  1. Restart After Effects.');
 console.log('  2. Open Window > Extensions > offhand.');
 console.log('  3. Start the MCP server in your client (npx -y offhand-mcp).');
 console.log('');
-console.log('The panel connects to the server automatically and reconnects when either side restarts.');
+console.log('The panel and the MCP server discover each other through %APPDATA%\\offhand.');
 
 function enablePlayerDebugMode() {
   if (process.platform !== 'win32') {

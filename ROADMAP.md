@@ -66,9 +66,25 @@ bridge architecture is being **flipped**. Everything in "Rewrite plan" below is 
    unverified, so the transport must stay swappable.
 
 ### Rewrite phases
-- [ ] **A. bolt-cep scaffold** — React project in `extension/`, id `com.offhand.panel`,
-      AEFT `[23.0,99.9]`, builds to `extension/dist/cep/`. Old `extension/client` +
-      `extension/host` replaced. Root scripts wire `build` / `install:cep`.
+- [x] **A. bolt-cep scaffold** — React project in `extension/`, id `com.offhand.panel`,
+      AEFT `[23.0,99.9]`, builds to `extension/dist/cep/`. Root scripts wire
+      `build:extension` / `install:cep`. **Verified: panel loads in AE 2023.**
+      - Done: `cep.config.ts` retargeted (id, AEFT-only host `[23.0,99.9]`, manifest v7.0,
+        CSXS 9.0, `--enable-nodejs`, 380×480, `installModules: ["ws"]`); icons copied to
+        `src/assets/`; unused Vue/Svelte lines stripped from `vite.config.ts` and
+        `src/jsx/index.ts`; `src/js/main/index.html` points at `index-react.tsx`;
+        `extension/package.json` renamed `offhand-panel@0.1.0` with `ws` dep.
+        `npm install` (569 pkgs) + `npm run build` green: manifest, jsx ES3 bundle,
+        `ws` copied into dist, panel assets built.
+      - **Old install cleared**: `%APPDATA%\Adobe\CEP\extensions\com.offhand.panel` was a real
+        folder (blocking bolt-cep's symlink with `EINVAL readlink`); removed it, then
+        `npm run symlink` created a junction → `extension/dist/cep`.
+      - **Kept on purpose:** `extension/CSXS`, `extension/client`, `extension/host` are still in
+        the repo as the porting source for phases C and D. They are *not* loaded — the manifest
+        in use is `extension/dist/cep/CSXS/manifest.xml`.
+      - Known cosmetic gap: manifest `<Icon>` paths (`./src/assets/*.png`) are relative to the
+        extension root but `src/` is not copied into `dist/cep`, so AE shows a default icon.
+        Fix via `copyAssets` in a later phase.
 - [ ] **B. Flipped bridge** — panel `ws` server + `bridge.json` writer + state machine;
       `src/server/bridge.ts` becomes a dial-in client with backoff and diagnosis codes.
 - [ ] **C. React panel UI** — state-machine display, activity log, working Reconnect,
@@ -79,6 +95,8 @@ bridge architecture is being **flipped**. Everything in "Rewrite plan" below is 
 - [ ] **F. Testability** — fake panel, mock AE object model, eval task set.
 - [ ] **G. Security/install** — raw-script toggle, `offhand install`, `offhand doctor --fix`.
 - [ ] **H. Docs + live AE verification** — README, `docs/*`, smoke test in AE 2023, then npm publish.
+
+> **Stopped after Phase A** (user instruction, 2026-11-25). Next up is Phase B.
 
 > **bolt-cep reference:** `https://github.com/hyperbrew/bolt-cep` (branch `master`).
 > A shallow clone lives at `C:\Users\Muaj\AppData\Local\Temp\opencode\bolt-cep` while this work runs.
