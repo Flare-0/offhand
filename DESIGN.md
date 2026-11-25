@@ -28,14 +28,23 @@ MCP client  ⟵ stdio ⟶  offhand server (Node / TypeScript)
                                                                         ⟵ evalScript ⟶ ExtendScript host
 ```
 
-**Key design choice: the Node server owns the WebSocket listener; the CEP panel connects out.**
+**Key design choice (2026-11-25, revised): the CEP panel owns the WebSocket listener; the Node server
+dials in.**
 
-This is the inverse of Blender MCP (Blender addon runs the server). Reasons:
+The original design had the Node server listen and the panel connect out. That was reversed during the
+bolt-cep rewrite, because the server’s version of the idea depended on `cep.fs` reading `bridge.json`,
+which failed silently and produced an undebuggable “Waiting for server” panel. The panel now writes
+`bridge.json` with real Node `fs` and hosts the socket:
 
-- CEP's embedded Node is old (varies by AE version); running a WS server in it is unreliable.
-- The offhand Node server can start before AE opens and simply wait.
-- When the panel crashes or AE restarts, the panel reconnects — the server keeps running.
-- The host adapter (JSX side) is small enough to be replaced when AE moves to UXP.
+- The panel is long-lived and lives inside AE, so it is the stable endpoint. MCP server processes are
+  short-lived (one per agent session) and can come and go.
+- Several MCP clients can share one After Effects instance.
+- Port conflicts disappear: the panel prefers 47823 but falls back to an ephemeral port and publishes it.
+- The server can still start before AE (it retries with backoff) and now reports a diagnosis code
+  (`PANEL_NOT_RUNNING`, `BRIDGE_STALE`, …) instead of hanging.
+- The host adapter stays small enough to replace when AE moves to UXP.
+
+See [docs/architecture.md](docs/architecture.md) for the current topology.
 
 ---
 

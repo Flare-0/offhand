@@ -49,7 +49,7 @@ console.log('');
 console.log('Next:');
 console.log('  1. Restart After Effects.');
 console.log('  2. Open Window > Extensions > offhand.');
-console.log('  3. Start the MCP server in your client (npx -y offhand-mcp).');
+console.log('  3. Add the offhand server to your MCP client (see docs/install.md).');
 console.log('');
 console.log('The panel and the MCP server discover each other through %APPDATA%\\offhand.');
 

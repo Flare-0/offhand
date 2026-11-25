@@ -2,6 +2,11 @@
 
 A clear breakdown of what is built, what is verified, and what still needs to be built or tested.
 
+> **0.1.0 public preview** released 2026-11-25 (GitHub release `v0.1.0`, repo now public). Install on
+> Windows with `irm https://raw.githubusercontent.com/Flare-0/offhand/main/scripts/setup-windows.ps1 | iex`.
+> Docs: [`CHANGELOG.md`](CHANGELOG.md), [`docs/install.md`](docs/install.md). Phases A–D are complete;
+> E–H follow below.
+
 ---
 
 ## ⚠️ ACTIVE: bolt-cep rewrite (started 2026-11-25)
