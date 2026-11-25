@@ -193,6 +193,7 @@ describe('bridge client', () => {
     expect(bridge.status().allowRawScripts).toBe(true);
 
     const socket = [...panel.sockets][0];
+    if (!socket) throw new Error('expected the panel to have a live socket');
     socket.send(
       JSON.stringify({ type: 'event', event: 'settings', data: { allowRawScripts: false } }),
     );
