@@ -82,13 +82,35 @@ bridge architecture is being **flipped**. Everything in "Rewrite plan" below is 
       - **Kept on purpose:** `extension/CSXS`, `extension/client`, `extension/host` are still in
         the repo as the porting source for phases C and D. They are *not* loaded — the manifest
         in use is `extension/dist/cep/CSXS/manifest.xml`.
-      - Known cosmetic gap: manifest `<Icon>` paths (`./src/assets/*.png`) are relative to the
-        extension root but `src/` is not copied into `dist/cep`, so AE shows a default icon.
-        Fix via `copyAssets` in a later phase.
-- [ ] **B. Flipped bridge** — panel `ws` server + `bridge.json` writer + state machine;
-      `src/server/bridge.ts` becomes a dial-in client with backoff and diagnosis codes.
-- [ ] **C. React panel UI** — state-machine display, activity log, working Reconnect,
-      Copy MCP config, "Allow raw scripts" toggle.
+      - Icon gap **fixed** in Phase B: `cep.config.ts` now points at `./assets/*-icon.png` and
+        `copyAssets: ["assets/light-icon.png", "assets/dark-icon.png"]` copies them into `dist/cep`.
+- [x] **B. Flipped bridge** — panel `ws` server + `bridge.json` writer + state machine;
+      `src/server/bridge.ts` is now a dial-in client with backoff and diagnosis codes.
+      - **Server side:** `src/shared/protocol.ts` is protocol **v2** (server sends `hello`, panel
+        answers `welcome`; calls carry `timeoutMs` + absolute `deadline`). `src/shared/paths.ts`
+        owns `bridge.json` v2 and reports *why* a config is unusable (`ok|missing|legacy|malformed`)
+        instead of returning `null`. `src/server/bridge.ts` is a non-blocking dial-in client
+        (300 ms → 2 s backoff, connect/handshake deadlines, heartbeat, `AE_BUSY` on call timeout).
+        `status` returns `{diagnosis, hint}`; `doctor` reports every hop.
+      - **Panel side:** `extension/src/js/bridge/{types,config,host,server}.ts` — `PanelBridge`
+        hosts `ws` on `127.0.0.1:47823` (falls back to an ephemeral port), publishes `bridge.json`
+        atomically, authenticates `hello` against the shared token, serializes host calls through a
+        queue with per-call deadlines, and exposes `status()` / `subscribe()` / `onLog()` to React.
+        `src/jsx/aeft/aeft.ts` exposes `dispatch(tool, argsJson)`, which lazily `$.evalFile`s the
+        legacy `host/offhand.jsx` until Phase D ports it; `vite.plugin.host.ts` copies `host/` into
+        `dist/cep/host/` at build time.
+      - **Verified:** extension build green (43 modules, `dist/cep/{assets,CSXS,host,jsx,main,
+        node_modules/ws}`), root typecheck / 23 tests / lint / build green. Live check in AE 2023
+        (23.6x62): the panel published `bridge.json` on `127.0.0.1:47823`, the MCP server connected
+        (`state: ready`), and `status` returned real project data through the full chain
+        MCP → WS → call queue → `evalTS` → legacy host. With AE closed the same tool returns
+        `PANEL_NOT_RUNNING` plus the "open Window > Extensions > offhand" hint.
+      - Gotcha found live: the panel publishes `startedAt` as **epoch ms (number)** while the server
+        validated it as a string, which surfaced as `BRIDGE_STALE` / "missing required fields".
+        The reader now accepts both; `tests/paths.test.ts` locks it in.
+- [ ] **C. React panel UI** — Phase B already ships a minimal panel (state chip, endpoint, AE
+      snapshot, activity log, working Reconnect, Copy MCP config). Remaining: "Allow raw scripts"
+      toggle, richer AE/comp detail, and a proper empty state.
 - [ ] **D. Host port** — `extension/host/**/*.jsx` → `extension/src/jsx/**/*.ts` with `evalTS`
       wiring; undo groups preserved.
 - [ ] **E. Tool surface** — layer IDs, write diffs, `batch`, `detail`, render jobs, execute promotion.
@@ -96,7 +118,11 @@ bridge architecture is being **flipped**. Everything in "Rewrite plan" below is 
 - [ ] **G. Security/install** — raw-script toggle, `offhand install`, `offhand doctor --fix`.
 - [ ] **H. Docs + live AE verification** — README, `docs/*`, smoke test in AE 2023, then npm publish.
 
-> **Stopped after Phase A** (user instruction, 2026-11-25). Next up is Phase B.
+> **Phase B done 2026-11-25**, verified live in AE 2023 (panel → server `ready`, `status` returns real
+> project data). Next up is Phase C.
+> Note: `offhand-mcp` is **not on npm** (`npm view` → 404), so MCP clients must launch
+> `node D:/Projects/offhand/dist/cli.js` until Phase H publishes it. Restarting the client after a
+> rebuild is required — an MCP server keeps running the code it was started with.
 
 > **bolt-cep reference:** `https://github.com/hyperbrew/bolt-cep` (branch `master`).
 > A shallow clone lives at `C:\Users\Muaj\AppData\Local\Temp\opencode\bolt-cep` while this work runs.

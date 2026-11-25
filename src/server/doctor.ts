@@ -1,8 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { appDataDir, bridgeConfigPath, readBridgeConfig } from '../shared/paths.js';
-import { VERSION } from '../shared/version.js';
+import {
+  appDataDir,
+  bridgeConfigPath,
+  readBridgeConfigFile,
+  tokenPath,
+} from '../shared/paths.js';
+import { PROTOCOL_VERSION, VERSION } from '../shared/version.js';
 
 export function packageRoot(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -44,14 +49,7 @@ function findAfterEffectsInstalls(): string[] {
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       if (!/after\s*effects/i.test(entry.name)) continue;
-      const candidate = path.join(root, entry.name);
-      if (fs.existsSync(path.join(candidate, 'Support Files', 'AfterFX.exe'))) {
-        installs.push(candidate);
-      } else if (fs.existsSync(path.join(candidate, 'AfterFX.exe'))) {
-        installs.push(candidate);
-      } else {
-        installs.push(candidate);
-      }
+      installs.push(path.join(root, entry.name));
     }
   }
 
@@ -60,11 +58,17 @@ function findAfterEffectsInstalls(): string[] {
 
 export interface DoctorReport {
   offhandVersion: string;
+  protocolVersion: number;
   platform: string;
   node: string;
   appDataDir: string;
   bridgeConfigPath: string;
+  /** 'ok' when a v2 bridge.json exists, otherwise why it cannot be used. */
+  bridgeConfigState: 'ok' | 'missing' | 'legacy' | 'malformed';
+  bridgeConfigVersion: number | null;
   bridgeConfig: unknown;
+  bridgeConfigError: string | null;
+  tokenPresent: boolean;
   packageRoot: string;
   extensionSource: string;
   extensionInstalled: boolean;
@@ -79,16 +83,22 @@ export function doctor(): DoctorReport {
     'C:\\Program Files (x86)\\Common Files\\Adobe\\CEP\\extensions',
     'C:\\Program Files\\Common Files\\Adobe\\CEP\\extensions',
   ]);
+  const bridge = readBridgeConfigFile();
 
   return {
     offhandVersion: VERSION,
+    protocolVersion: PROTOCOL_VERSION,
     platform: `${process.platform} ${process.arch}`,
     node: process.version,
     appDataDir: appDataDir(),
     bridgeConfigPath: bridgeConfigPath(),
-    bridgeConfig: readBridgeConfig(),
+    bridgeConfigState: bridge.status,
+    bridgeConfigVersion: bridge.status === 'legacy' ? bridge.version : bridge.status === 'ok' ? bridge.config.version : null,
+    bridgeConfig: bridge.status === 'ok' ? bridge.config : null,
+    bridgeConfigError: bridge.status === 'malformed' ? bridge.error : null,
+    tokenPresent: fs.existsSync(tokenPath()),
     packageRoot: root,
-    extensionSource: path.join(root, 'extension'),
+    extensionSource: path.join(root, 'extension', 'dist', 'cep'),
     extensionInstalled: fs.existsSync(
       path.join(userData(), 'Adobe', 'CEP', 'extensions', 'com.offhand.panel'),
     ),

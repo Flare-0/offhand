@@ -1,1 +1,213 @@
 @use "../variables.scss" as *;
+
+$bg: #1c1c1c;
+$card: #262626;
+$card-border: #383838;
+$text: #d8d8d8;
+$muted: #8d8d8d;
+$ok: #4fbf7a;
+$warn: #d9a441;
+$bad: #e0604f;
+$accent: #6ea8d8;
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+.oh-app {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 100%;
+  padding: 12px;
+  background: $bg;
+  color: $text;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+    "Helvetica Neue", Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: left;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+.oh-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.oh-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.oh-sub {
+  color: $muted;
+  font-size: 11px;
+}
+
+.oh-chip {
+  border-radius: 999px;
+  padding: 2px 9px;
+  border: 1px solid $card-border;
+  background: $card;
+  color: $muted;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+
+  &--listening {
+    color: $warn;
+    border-color: rgba($warn, 0.45);
+  }
+  &--ready {
+    color: $ok;
+    border-color: rgba($ok, 0.45);
+  }
+  &--degraded {
+    color: $bad;
+    border-color: rgba($bad, 0.5);
+  }
+}
+
+.oh-card {
+  box-sizing: border-box;
+  border: 1px solid $card-border;
+  border-radius: 6px;
+  background: $card;
+  padding: 8px 10px;
+
+  &--grow {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 96px;
+  }
+}
+
+.oh-card-title {
+  margin-bottom: 6px;
+  color: $muted;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.oh-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 1px 0;
+
+  > span:first-child {
+    color: $muted;
+    flex: 0 0 auto;
+  }
+
+  > span:last-child,
+  > code {
+    overflow: hidden;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  code {
+    font-family: Consolas, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    color: $accent;
+  }
+}
+
+.oh-hint {
+  margin: 6px 0 0;
+  color: $muted;
+  font-size: 11px;
+}
+
+.oh-error {
+  margin: 6px 0 0;
+  color: $bad;
+  font-size: 11px;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+.oh-muted {
+  margin: 0;
+  color: $muted;
+}
+
+.oh-log {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  max-height: 150px;
+  font-family: Consolas, "SF Mono", Menlo, monospace;
+  font-size: 10.5px;
+}
+
+.oh-log-line {
+  display: flex;
+  gap: 6px;
+  padding: 1px 0;
+  color: $text;
+  overflow-wrap: anywhere;
+
+  &--warn {
+    color: $warn;
+  }
+  &--error {
+    color: $bad;
+  }
+}
+
+.oh-log-time {
+  color: $muted;
+  flex: 0 0 auto;
+}
+
+.oh-actions {
+  display: flex;
+  gap: 8px;
+
+  button {
+    flex: 1 1 0;
+    padding: 5px 8px;
+    border: 1px solid $card-border;
+    border-radius: 5px;
+    background: $card;
+    color: $text;
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      border-color: $accent;
+      color: #ffffff;
+    }
+
+    &:disabled {
+      opacity: 0.55;
+      cursor: default;
+    }
+  }
+}
+
+.oh-path {
+  margin: 0;
+  color: $muted;
+  font-size: 9.5px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}

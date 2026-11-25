@@ -6,6 +6,7 @@ import { cep, CepOptions, runAction } from "vite-cep-plugin";
 import cepConfig from "./cep.config";
 import path from "path";
 import { extendscriptConfig } from "./vite.es.config";
+import { copyLegacyHost } from "./vite.plugin.host";
 
 const extensions = [".js", ".ts", ".tsx"];
 
@@ -48,6 +49,7 @@ if (action) runAction(config, action);
 export default defineConfig({
   plugins: [
     react(), // BOLT_REACT_ONLY
+    copyLegacyHost(path.resolve(__dirname, "host"), outDir),
     cep(config),
   ],
   resolve: {

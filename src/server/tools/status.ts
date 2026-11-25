@@ -20,10 +20,16 @@ export const statusTool: ToolDefinition = {
       return textResult({
         connected: false,
         bridge: {
+          state: bridge.state,
           host: bridge.host,
           port: bridge.port,
+          attempts: bridge.attempts,
+          lastError: bridge.lastError,
         },
-        hint: 'Open After Effects, then choose Window > Extensions > offhand. The panel reconnects automatically.',
+        diagnosis: bridge.diagnosis,
+        hint:
+          bridge.diagnosis?.hint ??
+          'Open After Effects, then choose Window > Extensions > offhand. The server retries automatically.',
       });
     }
 
@@ -31,6 +37,7 @@ export const statusTool: ToolDefinition = {
     return textResult({
       connected: true,
       bridge: {
+        state: bridge.state,
         panelVersion: bridge.panelVersion,
         connectedAt: bridge.connectedAt,
       },

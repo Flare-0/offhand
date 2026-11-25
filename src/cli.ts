@@ -36,8 +36,11 @@ Usage:
   offhand doctor          Print paths, bridge state, and AE installs.
   offhand --version       Print the version.
 
+The After Effects panel hosts the bridge: it listens on 127.0.0.1, publishes
+%APPDATA%\\offhand\\bridge.json, and this server dials in. Nothing listens here,
+so several MCP clients can connect at once.
+
 Environment:
-  OFFHAND_PORT            Fixed bridge port. Default: random free port.
   OFFHAND_HOME            Override the offhand data directory.
 
 MCP client config (example):

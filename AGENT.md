@@ -84,13 +84,63 @@ Gotchas already hit — do not rediscover them:
    yours to do: `src/js/main/index.html` must load `./index-react.tsx`, and `src/jsx/index.ts` must
    not import the deleted `./ame/ame`, `./ppro/ppro`, … modules. Both broke the first build.
 3. The template's `./src/assets/light-icon.png` / `dark-icon.png` do not exist — copy them in
-   (`assets/icon-1024.png` works) or the manifest references dead icon paths. They still point at
-   `./src/assets/…` which is **not** copied into `dist/cep`, so AE currently shows a default icon.
+   (`assets/icon-1024.png` works) or the manifest references dead icon paths. **Fixed in Phase B**:
+   `copyAssets` now copies both icons into `dist/cep/assets/`.
 
 Still legacy / still in the repo: `extension/CSXS`, `extension/client`, `extension/host` — kept as
 the porting source for phases C and D (rule 2 above). The manifest in use is the generated one.
 
-**Next phase: B — flip the bridge** (panel hosts the WS server, MCP server dials in).
+### ✅ Phase B done (2026-11-25) — bridge flipped, protocol v2
+
+**The socket now lives in the panel.** The panel publishes `%APPDATA%\offhand\bridge.json` and listens;
+the MCP server reads that file and dials in. `cep.fs` is gone from the config path, so the old silent
+"Waiting for server" failure cannot recur.
+
+Where things are:
+- `src/shared/protocol.ts` — **protocol v2**. MCP server sends `hello {protocol, token, clientVersion}`;
+  panel replies `welcome {protocol, panelVersion, ae}`. Calls carry `timeoutMs` **and** an absolute
+  `deadline`; results carry `{ok, data}` or a serialized error.
+- `src/shared/paths.ts` — `bridge.json` v2 (`{version:2, protocol, host, port, token, pid,
+  panelVersion, startedAt}`), atomic write, race-safe token (`flag:"wx"`), and
+  `readBridgeConfigFile()` → `ok | missing | legacy | malformed` so the server can diagnose.
+- `src/server/bridge.ts` — dial-in **client**, `start()` is non-blocking so the MCP server boots with
+  AE closed. Backoff 300 ms → 2 s, connect/handshake deadlines, heartbeat, serialized calls;
+  a call timeout sets diagnosis `AE_BUSY` (means "a modal dialog is probably blocking AE").
+- `src/server/tools/status.ts`, `src/server/doctor.ts`, `src/cli.ts` — report diagnosis + hint
+  (`PANEL_NOT_RUNNING`, `BRIDGE_STALE`, `TOKEN_MISMATCH`, `VERSION_MISMATCH`, `AE_BUSY`) instead of
+  `connected: false`. `OFFHAND_PORT` no longer exists; only `OFFHAND_HOME`.
+- `extension/src/js/bridge/types.ts` — **deliberate duplicate** of the shared protocol types; the
+  panel is a separate tsconfig root and cannot import repo-root `src/shared`. Keep the two in sync.
+- `extension/src/js/bridge/config.ts` — panel-side paths/token/`bridge.json` (port 47823, falls back
+  to an ephemeral port if taken).
+- `extension/src/js/bridge/server.ts` — `PanelBridge`: `ws` server, 5 s auth window, token + protocol
+  checks (close codes 4001–4004), `welcome` with cached AE snapshot, 15 s ping / 45 s pong, and a
+  **serialized host-call queue** with per-call deadlines (late results are dropped).
+- `extension/src/js/bridge/host.ts` — `callHost()` → `evalTS("dispatch", tool, JSON.stringify(args))`.
+- `extension/src/jsx/aeft/aeft.ts` — `dispatch(tool, argsJson)` lazily `$.evalFile`s
+  `dist/cep/host/offhand.jsx` and forwards; returns `HOST_UNAVAILABLE` if the legacy host is missing.
+  This is the bridge to **Phase D**, which ports `host/**/*.jsx` into `src/jsx/**/*.ts`.
+- `vite.plugin.host.ts` — copies `extension/host/` → `dist/cep/host/` at build time (`copyAssets`
+  resolves under `extension/src`, so it cannot be used for this).
+- `extension/src/js/main/main.tsx` + `main.scss` — minimal panel: state chip, endpoint, client count,
+  AE project/comp, activity log, Reconnect (`bridge.restart()`), Copy MCP config.
+
+**Verified live (AE 2023, 23.6x62):** panel published `bridge.json` on `127.0.0.1:47823`; the MCP
+server reported `state: "ready"` and `status` returned the real project (`Untitled`, no comp) through
+MCP → WS → call queue → `evalTS` → legacy host. With AE closed, `status` returns `PANEL_NOT_RUNNING`.
+
+**Trap hit live:** the panel writes `startedAt` as **epoch ms (number)**; the server's validator
+required a string, so a perfectly good `bridge.json` was classified `malformed` → `BRIDGE_STALE`.
+`src/shared/paths.ts` now accepts both and normalizes to string (`tests/paths.test.ts` covers it).
+Any future field added to `bridge.json` must be checked against what `extension/src/js/bridge/config.ts`
+actually writes — the two sides share no code.
+
+**Important:** `offhand-mcp` is **not published** (`npm view offhand-mcp version` → 404). MCP clients
+must run `node D:/Projects/offhand/dist/cli.js`. The panel's "Copy MCP config" button still emits the
+`npx -y offhand-mcp` form for after Phase H. Also: after rebuilding `dist/cli.js`, the MCP client must
+be restarted (in OpenCode, remove + re-add the server entry) — it keeps running the old code otherwise.
+
+**Next phase: C — finish the panel UI** (raw-scripts toggle, richer comp detail).
 
 ---
 

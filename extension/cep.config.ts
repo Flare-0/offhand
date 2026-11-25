@@ -15,10 +15,10 @@ const config: CEP_Config = {
   hosts: [{ name: "AEFT", version: "[23.0,99.9]" }],
 
   type: "Panel",
-  iconDarkNormal: "./src/assets/light-icon.png",
-  iconNormal: "./src/assets/dark-icon.png",
-  iconDarkNormalRollOver: "./src/assets/light-icon.png",
-  iconNormalRollOver: "./src/assets/dark-icon.png",
+  iconDarkNormal: "./assets/light-icon.png",
+  iconNormal: "./assets/dark-icon.png",
+  iconDarkNormalRollOver: "./assets/light-icon.png",
+  iconNormalRollOver: "./assets/dark-icon.png",
   // --enable-nodejs gives the panel a real Node runtime so it can host the
   // WebSocket server and read/write bridge.json with plain fs.
   parameters: ["--v=0", "--enable-nodejs", "--mixed-context"],
@@ -55,7 +55,7 @@ const config: CEP_Config = {
   // `ws` is copied into dist so CEP's Node runtime can require() it — this is
   // what lets the panel own the WebSocket listener instead of dialing out.
   installModules: ["ws"],
-  copyAssets: [],
+  copyAssets: ["assets/light-icon.png", "assets/dark-icon.png"],
   copyZipAssets: [],
 };
 export default config;

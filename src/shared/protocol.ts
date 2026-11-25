@@ -19,28 +19,59 @@ export interface AeSnapshot {
   } | null;
 }
 
+/**
+ * Bridge lifecycle. Every transition has a deadline; nothing is allowed to
+ * hang silently in a boolean.
+ *
+ * idle         no bridge.json yet (panel never published an address)
+ * connecting   TCP/WebSocket handshake in flight
+ * handshaking  socket is open, waiting for the panel's welcome
+ * ready        authenticated and able to take calls
+ * degraded     the last attempt failed; a retry is scheduled
+ */
+export type BridgeState = 'idle' | 'connecting' | 'handshaking' | 'ready' | 'degraded';
+
+export type BridgeDiagnosisCode =
+  | 'PANEL_NOT_RUNNING'
+  | 'BRIDGE_STALE'
+  | 'TOKEN_MISMATCH'
+  | 'VERSION_MISMATCH'
+  | 'AE_BUSY'
+  | 'BRIDGE_OFFLINE';
+
+export interface BridgeDiagnosis {
+  code: BridgeDiagnosisCode;
+  message: string;
+  hint: string;
+}
+
+/** Sent by the MCP server (client) right after the socket opens. */
 export interface HelloMessage {
   type: 'hello';
   protocol: number;
   token: string;
-  panelVersion: string;
-  ae?: AeSnapshot | null;
+  clientVersion: string;
 }
 
+/** Sent by the panel once the hello is accepted. */
 export interface WelcomeMessage {
   type: 'welcome';
   protocol: number;
-  serverVersion: string;
+  panelVersion: string;
+  ae: AeSnapshot | null;
 }
 
+/** MCP server -> panel. `deadline` is an absolute epoch-ms timestamp. */
 export interface CallMessage {
   type: 'call';
   id: string;
   tool: string;
   args: unknown;
-  timeoutMs?: number;
+  timeoutMs: number;
+  deadline: number;
 }
 
+/** Panel -> MCP server. */
 export interface ResultMessage {
   type: 'result';
   id: string;
@@ -66,31 +97,33 @@ export interface BridgeEventMessage {
   data?: unknown;
 }
 
-export interface AuthErrorMessage {
+export interface BridgeErrorMessage {
   type: 'error';
   code: string;
   message: string;
+  hint?: string;
 }
 
-export type ServerToPanelMessage =
-  | WelcomeMessage
-  | CallMessage
-  | PingMessage
-  | PongMessage
-  | AuthErrorMessage;
+export type ClientToPanelMessage = HelloMessage | CallMessage | PingMessage | PongMessage;
 
-export type PanelToServerMessage =
-  | HelloMessage
+export type PanelToClientMessage =
+  | WelcomeMessage
   | ResultMessage
   | PingMessage
   | PongMessage
-  | BridgeEventMessage;
+  | BridgeEventMessage
+  | BridgeErrorMessage;
 
+/** Panel -> client liveness signal, used by `status`. */
 export interface BridgeStatus {
+  state: BridgeState;
   online: boolean;
-  host: string;
+  host: string | null;
   port: number | null;
   panelVersion: string | null;
   ae: AeSnapshot | null;
   connectedAt: string | null;
+  attempts: number;
+  lastError: string | null;
+  diagnosis: BridgeDiagnosis | null;
 }

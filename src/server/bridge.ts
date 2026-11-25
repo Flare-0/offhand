@@ -1,20 +1,20 @@
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import type { AddressInfo } from 'node:net';
-import { WebSocket, WebSocketServer, type RawData } from 'ws';
+import { WebSocket, type RawData } from 'ws';
 import { OffhandError } from '../shared/errors.js';
-import {
-  getOrCreateToken,
-  removeBridgeConfig,
-  writeBridgeConfig,
-} from '../shared/paths.js';
+import { readBridgeConfigFile, type BridgeConfig } from '../shared/paths.js';
 import type {
   AeSnapshot,
+  BridgeDiagnosis,
+  BridgeDiagnosisCode,
+  BridgeState,
   BridgeStatus,
+  CallMessage,
+  ClientToPanelMessage,
   HelloMessage,
-  PanelToServerMessage,
+  PanelToClientMessage,
   ResultMessage,
-  ServerToPanelMessage,
+  WelcomeMessage,
 } from '../shared/protocol.js';
 import { PROTOCOL_VERSION, VERSION } from '../shared/version.js';
 import { logInfo } from './log.js';
@@ -23,158 +23,167 @@ interface PendingCall {
   resolve: (value: unknown) => void;
   reject: (error: unknown) => void;
   timer: NodeJS.Timeout;
-  startedAt: number;
   tool: string;
 }
 
 export interface BridgeOptions {
-  host?: string;
-  port?: number;
-  authTimeoutMs?: number;
+  /** First retry delay after a failed attempt. */
+  retryBaseMs?: number;
+  /** Ceiling for the exponential retry backoff. */
+  retryMaxMs?: number;
+  /** TCP + WebSocket upgrade deadline. */
+  connectTimeoutMs?: number;
+  /** How long the panel has to answer a hello with a welcome. */
+  handshakeTimeoutMs?: number;
+  /** Poll interval used while no bridge.json exists (or it is unreadable). */
+  idlePollMs?: number;
   heartbeatMs?: number;
   requestTimeoutMs?: number;
 }
 
-const LOCAL_ORIGIN = /^(file:\/\/|null$|chrome-extension:\/\/|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$)/i;
+const DEFAULT_RETRY_BASE_MS = 300;
+const DEFAULT_RETRY_MAX_MS = 2_000;
+const DEFAULT_CONNECT_TIMEOUT_MS = 4_000;
+const DEFAULT_HANDSHAKE_TIMEOUT_MS = 5_000;
+const DEFAULT_IDLE_POLL_MS = 400;
+const DEFAULT_HEARTBEAT_MS = 15_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
+const HINTS: Record<BridgeDiagnosisCode, string> = {
+  PANEL_NOT_RUNNING:
+    'Open After Effects, then choose Window > Extensions > offhand. The panel publishes its address and this server dials in automatically.',
+  BRIDGE_STALE:
+    'The panel published an address but is not answering. Reopen Window > Extensions > offhand (or click Reconnect in the panel) and retry.',
+  TOKEN_MISMATCH:
+    'The panel and this server read different tokens from %APPDATA%\\offhand\\token. Reopen the panel to re-read it; if it persists, delete the token file and restart both sides.',
+  VERSION_MISMATCH:
+    'The panel and this server speak different bridge protocols. Update the panel (npm run build:extension) or the MCP server so both are the same version.',
+  AE_BUSY:
+    'After Effects may be showing a modal dialog or still running a long operation. Clear the dialog, then retry.',
+  BRIDGE_OFFLINE:
+    'Open the offhand panel in After Effects and retry.',
+};
 
 export class Bridge extends EventEmitter {
-  private readonly host: string;
-  private readonly requestedPort: number;
-  private readonly authTimeoutMs: number;
+  private readonly retryBaseMs: number;
+  private readonly retryMaxMs: number;
+  private readonly connectTimeoutMs: number;
+  private readonly handshakeTimeoutMs: number;
+  private readonly idlePollMs: number;
   private readonly heartbeatMs: number;
   private readonly requestTimeoutMs: number;
 
-  private server: WebSocketServer | null = null;
+  private state: BridgeState = 'idle';
   private socket: WebSocket | null = null;
-  private authenticated = false;
-  private token = '';
-  private actualPort: number | null = null;
+  private loop: Promise<void> | null = null;
+  private stopping = false;
+  private sleepers = new Set<() => void>();
+
+  private config: BridgeConfig | null = null;
+  private configKey: string | null = null;
   private panelVersion: string | null = null;
   private ae: AeSnapshot | null = null;
   private connectedAt: string | null = null;
-  private lastPongAt = 0;
-  private authTimer: NodeJS.Timeout | null = null;
-  private heartbeat: NodeJS.Timeout | null = null;
+  private attempts = 0;
+  private lastError: string | null = null;
+  private diagnosis: BridgeDiagnosis | null = null;
+
   private readonly pending = new Map<string, PendingCall>();
+  private heartbeat: NodeJS.Timeout | null = null;
+  private lastPongAt = 0;
+  private welcome: {
+    resolve: (message: WelcomeMessage) => void;
+    reject: (error: unknown) => void;
+    timer: NodeJS.Timeout;
+  } | null = null;
+  private closed: Promise<{ code: number; reason: string }> | null = null;
 
   constructor(options: BridgeOptions = {}) {
     super();
-    this.host = options.host ?? '127.0.0.1';
-    this.requestedPort = options.port ?? 0;
-    this.authTimeoutMs = options.authTimeoutMs ?? 8_000;
-    this.heartbeatMs = options.heartbeatMs ?? 15_000;
-    this.requestTimeoutMs = options.requestTimeoutMs ?? 30_000;
+    this.retryBaseMs = options.retryBaseMs ?? DEFAULT_RETRY_BASE_MS;
+    this.retryMaxMs = options.retryMaxMs ?? DEFAULT_RETRY_MAX_MS;
+    this.connectTimeoutMs = options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
+    this.handshakeTimeoutMs = options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS;
+    this.idlePollMs = options.idlePollMs ?? DEFAULT_IDLE_POLL_MS;
+    this.heartbeatMs = options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
+    this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
+  /**
+   * Starts the dial-in loop. Deliberately does **not** wait for a connection:
+   * the MCP server must boot with After Effects closed.
+   */
   async start(): Promise<void> {
-    if (this.server) return;
-
-    this.token = getOrCreateToken();
-
-    await new Promise<void>((resolve, reject) => {
-      const server = new WebSocketServer({
-        host: this.host,
-        port: this.requestedPort,
-        maxPayload: 16 * 1024 * 1024,
-      });
-      this.server = server;
-
-      const onError = (error: Error) => {
-        cleanup();
-        reject(
-          new OffhandError('BRIDGE_OFFLINE', `Could not start the bridge on ${this.host}:${this.requestedPort}: ${error.message}`, {
-            hint: 'Another offhand server may already be running. Close the other MCP client or stop the other server, then retry.',
-            cause: error,
-          }),
-        );
-      };
-
-      const onListening = () => {
-        cleanup();
-        this.actualPort = (server.address() as AddressInfo).port;
-        // Keep a listener for runtime errors; an unhandled 'error' event would crash the MCP server.
-        server.on('error', (error) => logInfo(`bridge server error: ${error.message}`));
-        resolve();
-      };
-
-      const cleanup = () => {
-        server.off('error', onError);
-        server.off('listening', onListening);
-      };
-
-      server.once('error', onError);
-      server.once('listening', onListening);
-      server.on('connection', (socket, request) => this.handleConnection(socket, request));
-    });
-
-    if (this.actualPort === null) {
-      throw new OffhandError('BRIDGE_OFFLINE', 'The bridge started without a port.');
-    }
-
-    writeBridgeConfig({
-      version: 1,
-      host: this.host,
-      port: this.actualPort,
-      token: this.token,
-      pid: process.pid,
-      startedAt: new Date().toISOString(),
-    });
-
-    this.heartbeat = setInterval(() => this.ping(), this.heartbeatMs);
-    this.heartbeat.unref();
-
-    logInfo(`bridge listening on ws://${this.host}:${this.actualPort}`);
+    if (this.loop) return;
+    this.stopping = false;
+    logInfo(`bridge client started (protocol ${PROTOCOL_VERSION})`);
+    this.loop = this.run();
   }
 
   isOnline(): boolean {
-    return Boolean(this.socket && this.socket.readyState === WebSocket.OPEN && this.authenticated);
+    return this.state === 'ready' && Boolean(this.socket && this.socket.readyState === WebSocket.OPEN);
   }
 
   status(): BridgeStatus {
     return {
+      state: this.state,
       online: this.isOnline(),
-      host: this.host,
-      port: this.actualPort,
+      host: this.config?.host ?? null,
+      port: this.config?.port ?? null,
       panelVersion: this.panelVersion,
       ae: this.ae,
       connectedAt: this.connectedAt,
+      attempts: this.attempts,
+      lastError: this.lastError,
+      diagnosis: this.diagnosis,
     };
   }
 
   async call(tool: string, args: unknown, options: { timeoutMs?: number } = {}): Promise<unknown> {
     if (!this.isOnline() || !this.socket) {
-      throw new OffhandError('BRIDGE_OFFLINE', 'After Effects is not connected to offhand.', {
-        hint: 'Open After Effects, then choose Window > Extensions > offhand. The panel reconnects automatically.',
-      });
+      throw this.offlineError();
     }
 
     const id = crypto.randomUUID();
     const timeoutMs = Math.max(1_000, options.timeoutMs ?? this.requestTimeoutMs);
+    const message: CallMessage = {
+      type: 'call',
+      id,
+      tool,
+      args,
+      timeoutMs,
+      deadline: Date.now() + timeoutMs,
+    };
 
     return new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
+        this.setDiagnosis({
+          code: 'AE_BUSY',
+          message: `After Effects did not answer "${tool}" within ${Math.round(timeoutMs / 1000)}s.`,
+          hint: HINTS.AE_BUSY,
+        });
         reject(
           new OffhandError(
-            'BRIDGE_TIMEOUT',
+            'AE_BUSY',
             `After Effects did not answer "${tool}" within ${Math.round(timeoutMs / 1000)}s.`,
-            {
-              hint: 'The operation may still be running. Check After Effects, then retry with a smaller scope.',
-            },
+            { hint: HINTS.AE_BUSY },
           ),
         );
       }, timeoutMs);
       timer.unref();
 
-      this.pending.set(id, { resolve, reject, timer, startedAt: Date.now(), tool });
+      this.pending.set(id, { resolve, reject, timer, tool });
 
-      const sent = this.send({ type: 'call', id, tool, args, timeoutMs });
-      if (!sent) {
+      try {
+        this.socket?.send(JSON.stringify(message));
+      } catch (error) {
         clearTimeout(timer);
         this.pending.delete(id);
         reject(
-          new OffhandError('BRIDGE_DISCONNECTED', 'The After Effects panel disconnected before the call was sent.', {
-            hint: 'Reopen Window > Extensions > offhand and retry.',
+          new OffhandError('BRIDGE_DISCONNECTED', 'The panel disconnected before the call was sent.', {
+            hint: HINTS.BRIDGE_STALE,
+            cause: error,
           }),
         );
       }
@@ -182,122 +191,209 @@ export class Bridge extends EventEmitter {
   }
 
   async stop(): Promise<void> {
-    if (this.heartbeat) {
-      clearInterval(this.heartbeat);
-      this.heartbeat = null;
-    }
-    if (this.authTimer) {
-      clearTimeout(this.authTimer);
-      this.authTimer = null;
-    }
+    this.stopping = true;
+    for (const wake of [...this.sleepers]) wake();
+    this.teardown('The offhand server is shutting down.');
+    this.setState('idle');
 
-    this.rejectPending(
-      () => new OffhandError('BRIDGE_DISCONNECTED', 'The offhand server stopped before the call completed.'),
-    );
-
-    if (this.socket) {
+    const loop = this.loop;
+    this.loop = null;
+    if (loop) {
       try {
-        this.socket.close(1001, 'offhand server stopping');
+        await loop;
       } catch {
-        // Ignore close races.
+        // The loop is best-effort during shutdown.
       }
-      this.socket = null;
-    }
-    this.authenticated = false;
-
-    const server = this.server;
-    this.server = null;
-    if (server) {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-    }
-
-    removeBridgeConfig(process.pid);
-    this.actualPort = null;
-  }
-
-  private rejectPending(makeError: (pending: PendingCall) => OffhandError): void {
-    for (const [id, pending] of this.pending) {
-      clearTimeout(pending.timer);
-      pending.reject(makeError(pending));
-      this.pending.delete(id);
     }
   }
 
-  private handleConnection(socket: WebSocket, request: { headers: { origin?: string } }): void {
-    const origin = request.headers.origin;
-    if (origin && !LOCAL_ORIGIN.test(origin)) {
-      socket.close(4003, 'Invalid origin');
-      logInfo(`rejected panel connection from origin ${origin}`);
-      return;
-    }
+  private async run(): Promise<void> {
+    let backoff = this.retryBaseMs;
 
-    if (this.socket) {
-      this.rejectPending(
-        (pending) =>
-          new OffhandError(
-            'BRIDGE_DISCONNECTED',
-            `The After Effects panel was replaced while "${pending.tool}" was running.`,
-            { hint: 'Check After Effects before retrying. The older panel can no longer answer.' },
-          ),
-      );
-      try {
-        this.socket.close(4001, 'Replaced by a newer panel connection');
-      } catch {
-        // Ignore close races.
+    while (!this.stopping) {
+      const read = readBridgeConfigFile();
+
+      if (read.status !== 'ok') {
+        this.config = null;
+        this.configKey = null;
+        this.panelVersion = null;
+        this.ae = null;
+        this.connectedAt = null;
+        this.setState(read.status === 'missing' ? 'idle' : 'degraded');
+
+        if (read.status === 'missing') {
+          this.setDiagnosis({
+            code: 'PANEL_NOT_RUNNING',
+            message: 'No offhand bridge has been published yet.',
+            hint: HINTS.PANEL_NOT_RUNNING,
+          });
+        } else if (read.status === 'legacy') {
+          this.setDiagnosis({
+            code: 'VERSION_MISMATCH',
+            message: `bridge.json is version ${read.version || 'unknown'}; this server needs version 2.`,
+            hint: HINTS.VERSION_MISMATCH,
+          });
+        } else {
+          this.setDiagnosis({
+            code: 'BRIDGE_STALE',
+            message: `bridge.json could not be used (${read.error}).`,
+            hint: HINTS.BRIDGE_STALE,
+          });
+        }
+
+        await this.sleep(this.idlePollMs);
+        continue;
       }
+
+      const config = read.config;
+      const key = `${config.host}:${config.port}:${config.startedAt}`;
+      if (key !== this.configKey) {
+        this.configKey = key;
+        this.config = config;
+        backoff = this.retryBaseMs;
+      }
+
+      this.attempts += 1;
+      this.setState('connecting');
+
+      try {
+        const socket = await this.open(config);
+        if (this.stopping) {
+          socket.terminate();
+          break;
+        }
+
+        this.socket = socket;
+        this.attach(socket);
+        this.setState('handshaking');
+
+        const hello: HelloMessage = {
+          type: 'hello',
+          protocol: PROTOCOL_VERSION,
+          token: config.token,
+          clientVersion: VERSION,
+        };
+        socket.send(JSON.stringify(hello));
+
+        const welcome = await this.awaitWelcome();
+        this.panelVersion = welcome.panelVersion;
+        this.ae = welcome.ae ?? null;
+        this.connectedAt = new Date().toISOString();
+        this.lastError = null;
+        this.setDiagnosis(null);
+        this.setState('ready');
+        this.startHeartbeat();
+        logInfo(`panel connected (panel ${welcome.panelVersion}, AE ${welcome.ae?.version ?? 'unknown'})`);
+        this.emit('online', this.ae);
+
+        const closed = await this.awaitClose();
+        if (!this.stopping) {
+          this.lastError = `panel closed the connection (${closed.code}${closed.reason ? ` ${closed.reason}` : ''})`;
+          this.setDiagnosis({
+            code: 'BRIDGE_STALE',
+            message: 'The offhand panel closed the bridge connection.',
+            hint: HINTS.BRIDGE_STALE,
+          });
+        }
+      } catch (error) {
+        this.captureError(error);
+      } finally {
+        const wasOnline = this.state === 'ready';
+        this.teardown();
+        if (wasOnline) this.emit('offline');
+      }
+
+      if (this.stopping) break;
+
+      this.setState('degraded');
+      await this.sleep(backoff);
+      backoff = Math.min(Math.round(backoff * 1.8), this.retryMaxMs);
     }
 
-    if (this.authTimer) {
-      clearTimeout(this.authTimer);
-      this.authTimer = null;
-    }
+    this.setState('idle');
+  }
 
-    this.socket = socket;
-    this.authenticated = false;
-    this.connectedAt = null;
-    this.panelVersion = null;
-    this.ae = null;
+  private open(config: BridgeConfig): Promise<WebSocket> {
+    const url = `ws://${config.host}:${config.port}`;
+    return new Promise<WebSocket>((resolve, reject) => {
+      const socket = new WebSocket(url, {
+        handshakeTimeout: this.connectTimeoutMs,
+        maxPayload: 32 * 1024 * 1024,
+      });
 
-    this.authTimer = setTimeout(() => {
-      socket.close(4003, 'Authentication timeout');
-    }, this.authTimeoutMs);
-    this.authTimer.unref();
+      const timer = setTimeout(() => {
+        cleanup();
+        socket.terminate();
+        reject(
+          new OffhandError('BRIDGE_STALE', `Timed out connecting to ${url}.`, {
+            hint: HINTS.BRIDGE_STALE,
+          }),
+        );
+      }, this.connectTimeoutMs);
+      timer.unref();
+
+      const onOpen = () => {
+        cleanup();
+        resolve(socket);
+      };
+      const onError = (error: Error) => {
+        cleanup();
+        reject(
+          new OffhandError('BRIDGE_STALE', `Could not connect to ${url}: ${error.message}`, {
+            hint: HINTS.BRIDGE_STALE,
+            cause: error,
+          }),
+        );
+      };
+      const cleanup = () => {
+        clearTimeout(timer);
+        socket.off('open', onOpen);
+        socket.off('error', onError);
+      };
+
+      socket.once('open', onOpen);
+      socket.once('error', onError);
+    });
+  }
+
+  private attach(socket: WebSocket): void {
+    this.lastPongAt = Date.now();
+
+    this.closed = new Promise((resolve) => {
+      socket.once('close', (code, reason) => resolve({ code, reason: reason.toString() }));
+    });
 
     socket.on('message', (data) => this.handleMessage(socket, data));
-    socket.on('close', () => this.handleClose(socket));
     socket.on('error', (error) => {
-      logInfo(`panel socket error: ${error.message}`);
+      this.lastError = error.message;
+      logInfo(`bridge socket error: ${error.message}`);
     });
   }
 
   private handleMessage(socket: WebSocket, data: RawData): void {
     if (socket !== this.socket) return;
 
-    let message: PanelToServerMessage;
+    let message: PanelToClientMessage;
     try {
-      message = JSON.parse(data.toString()) as PanelToServerMessage;
+      message = JSON.parse(data.toString()) as PanelToClientMessage;
     } catch {
+      this.lastError = 'the panel sent invalid JSON';
       socket.close(4002, 'Invalid JSON');
       return;
     }
 
-    if (!message || typeof message !== 'object' || typeof message.type !== 'string') {
-      socket.close(4002, 'Invalid message');
-      return;
-    }
-
-    if (!this.authenticated) {
-      if (message.type !== 'hello') {
-        socket.close(4003, 'Authenticate first');
-        return;
-      }
-      this.handleHello(socket, message);
-      return;
-    }
-
     switch (message.type) {
+      case 'welcome':
+        this.resolveWelcome(message);
+        break;
+      case 'error':
+        this.failWelcome(this.diagnosisFromError(message.code, message.message));
+        break;
       case 'result':
         this.handleResult(message);
+        break;
+      case 'ping':
+        this.send({ type: 'pong', ts: message.ts });
         break;
       case 'pong':
         this.lastPongAt = Date.now();
@@ -305,58 +401,9 @@ export class Bridge extends EventEmitter {
       case 'event':
         this.emit('event', message.event, message.data);
         break;
-      case 'ping':
-        this.send({ type: 'pong', ts: message.ts });
-        break;
-      case 'hello':
-        break;
       default:
         break;
     }
-  }
-
-  private handleHello(socket: WebSocket, message: HelloMessage): void {
-    if (message.protocol !== PROTOCOL_VERSION) {
-      this.send({
-        type: 'error',
-        code: 'PROTOCOL_MISMATCH',
-        message: `Panel protocol ${String(message.protocol)} does not match server protocol ${PROTOCOL_VERSION}.`,
-      });
-      socket.close(4004, 'Protocol mismatch');
-      return;
-    }
-
-    if (typeof message.token !== 'string' || !safeEqual(message.token, this.token)) {
-      this.send({
-        type: 'error',
-        code: 'AUTH_FAILED',
-        message: 'The panel token does not match this offhand server.',
-      });
-      socket.close(4003, 'Authentication failed');
-      return;
-    }
-
-    if (this.authTimer) {
-      clearTimeout(this.authTimer);
-      this.authTimer = null;
-    }
-
-    this.authenticated = true;
-    this.panelVersion = message.panelVersion ?? null;
-    this.ae = message.ae ?? null;
-    this.connectedAt = new Date().toISOString();
-    this.lastPongAt = Date.now();
-
-    this.send({
-      type: 'welcome',
-      protocol: PROTOCOL_VERSION,
-      serverVersion: VERSION,
-    });
-
-    logInfo(
-      `panel connected (panel ${this.panelVersion ?? 'unknown'}, AE ${this.ae?.version ?? 'unknown'})`,
-    );
-    this.emit('online', this.ae);
   }
 
   private handleResult(message: ResultMessage): void {
@@ -367,69 +414,197 @@ export class Bridge extends EventEmitter {
     this.pending.delete(message.id);
 
     if (message.ok) {
+      this.setDiagnosis(null);
       pending.resolve(message.data);
       return;
     }
 
-    const error = new OffhandError(
-      (message.error?.code as never) ?? 'HOST_ERROR',
-      message.error?.message ?? 'After Effects returned an unknown error.',
-      {
-        hint: message.error?.hint,
-        details: message.error?.details,
-      },
+    pending.reject(
+      new OffhandError(
+        (message.error?.code as never) ?? 'HOST_ERROR',
+        message.error?.message ?? 'After Effects returned an unknown error.',
+        { hint: message.error?.hint, details: message.error?.details },
+      ),
     );
-    pending.reject(error);
   }
 
-  private handleClose(socket: WebSocket): void {
-    if (this.socket !== socket) return;
+  private awaitWelcome(): Promise<WelcomeMessage> {
+    return new Promise<WelcomeMessage>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.welcome = null;
+        reject(
+          new OffhandError(
+            'BRIDGE_STALE',
+            'The panel opened the socket but did not complete the handshake.',
+            { hint: HINTS.BRIDGE_STALE },
+          ),
+        );
+      }, this.handshakeTimeoutMs);
+      timer.unref();
+      this.welcome = { resolve, reject, timer };
+    });
+  }
 
+  private resolveWelcome(message: WelcomeMessage): void {
+    const welcome = this.welcome;
+    if (!welcome) return;
+    clearTimeout(welcome.timer);
+    this.welcome = null;
+
+    if (message.protocol !== PROTOCOL_VERSION) {
+      welcome.reject(
+        new OffhandError(
+          'VERSION_MISMATCH',
+          `The panel speaks protocol ${message.protocol}, this server speaks ${PROTOCOL_VERSION}.`,
+          { hint: HINTS.VERSION_MISMATCH },
+        ),
+      );
+      return;
+    }
+    welcome.resolve(message);
+  }
+
+  private failWelcome(error: OffhandError): void {
+    const welcome = this.welcome;
+    if (!welcome) return;
+    clearTimeout(welcome.timer);
+    this.welcome = null;
+    welcome.reject(error);
+  }
+
+  private awaitClose(): Promise<{ code: number; reason: string }> {
+    return this.closed ?? new Promise(() => {});
+  }
+
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.lastPongAt = Date.now();
+    this.heartbeat = setInterval(() => {
+      if (!this.isOnline()) return;
+      if (Date.now() - this.lastPongAt > this.heartbeatMs * 3) {
+        this.lastError = 'panel heartbeat expired';
+        this.socket?.terminate();
+        return;
+      }
+      this.send({ type: 'ping', ts: Date.now() });
+    }, this.heartbeatMs);
+    this.heartbeat.unref();
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeat) {
+      clearInterval(this.heartbeat);
+      this.heartbeat = null;
+    }
+  }
+
+  private teardown(reason = 'The panel disconnected before the call completed.'): void {
+    this.stopHeartbeat();
+    this.failWelcome(new OffhandError('BRIDGE_DISCONNECTED', reason));
+
+    for (const [id, pending] of this.pending) {
+      clearTimeout(pending.timer);
+      pending.reject(new OffhandError('BRIDGE_DISCONNECTED', `The panel disconnected while "${pending.tool}" was running.`, { hint: HINTS.BRIDGE_STALE }));
+      this.pending.delete(id);
+    }
+
+    const socket = this.socket;
     this.socket = null;
-    this.authenticated = false;
-    this.connectedAt = null;
+    this.closed = null;
     this.panelVersion = null;
     this.ae = null;
+    this.connectedAt = null;
 
-    this.rejectPending(
-      (pending) =>
-        new OffhandError(
-          'BRIDGE_DISCONNECTED',
-          `The After Effects panel disconnected while "${pending.tool}" was running.`,
-          {
-            hint: 'Reopen Window > Extensions > offhand. If the operation was a render, check After Effects before retrying.',
-          },
-        ),
-    );
-
-    logInfo('panel disconnected');
-    this.emit('offline');
+    if (socket) {
+      try {
+        // Keep the close listener: `awaitClose()` must resolve so the retry loop
+        // can observe the disconnect instead of hanging on stop().
+        socket.terminate();
+      } catch {
+        // Ignore close races.
+      }
+    }
   }
 
-  private ping(): void {
-    if (!this.isOnline()) return;
+  private send(message: ClientToPanelMessage): boolean {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return false;
+    try {
+      this.socket.send(JSON.stringify(message));
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
-    if (Date.now() - this.lastPongAt > this.heartbeatMs * 3) {
-      logInfo('panel heartbeat expired; closing stale connection');
-      this.socket?.terminate();
+  private offlineError(): OffhandError {
+    const diagnosis = this.diagnosis;
+    if (diagnosis) {
+      return new OffhandError(diagnosis.code, diagnosis.message, { hint: diagnosis.hint });
+    }
+    return new OffhandError('BRIDGE_OFFLINE', 'After Effects is not connected to offhand.', {
+      hint: HINTS.BRIDGE_OFFLINE,
+    });
+  }
+
+  private captureError(error: unknown): void {
+    if (error instanceof OffhandError) {
+      this.lastError = error.message;
+      const mapped: BridgeDiagnosisCode =
+        error.code === 'PANEL_NOT_RUNNING' ||
+        error.code === 'BRIDGE_STALE' ||
+        error.code === 'TOKEN_MISMATCH' ||
+        error.code === 'VERSION_MISMATCH' ||
+        error.code === 'AE_BUSY'
+          ? error.code
+          : 'BRIDGE_OFFLINE';
+      this.setDiagnosis({
+        code: mapped,
+        message: error.message,
+        hint: error.hint ?? HINTS[mapped],
+      });
       return;
     }
 
-    this.send({ type: 'ping', ts: Date.now() });
+    const message = error instanceof Error ? error.message : String(error);
+    this.lastError = message;
+    this.setDiagnosis({
+      code: 'BRIDGE_OFFLINE',
+      message: `Could not reach the offhand panel: ${message}`,
+      hint: HINTS.BRIDGE_OFFLINE,
+    });
   }
 
-  private send(message: ServerToPanelMessage): boolean {
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN || !this.authenticated) {
-      return false;
-    }
-    this.socket.send(JSON.stringify(message));
-    return true;
+  private diagnosisFromError(code: string, message: string): OffhandError {
+    const mapped: BridgeDiagnosisCode =
+      code === 'AUTH_FAILED' ? 'TOKEN_MISMATCH' : code === 'PROTOCOL_MISMATCH' ? 'VERSION_MISMATCH' : 'BRIDGE_STALE';
+    return new OffhandError(mapped, message, { hint: HINTS[mapped] });
   }
-}
 
-function safeEqual(left: string, right: string): boolean {
-  const a = Buffer.from(left);
-  const b = Buffer.from(right);
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
+  private setDiagnosis(diagnosis: BridgeDiagnosis | null): void {
+    const changed =
+      this.diagnosis?.code !== diagnosis?.code || this.diagnosis?.message !== diagnosis?.message;
+    this.diagnosis = diagnosis;
+    if (changed) this.emit('diagnosis', diagnosis);
+  }
+
+  private setState(state: BridgeState): void {
+    if (this.state === state) return;
+    this.state = state;
+    this.emit('state', state);
+  }
+
+  private sleep(ms: number): Promise<void> {
+    if (this.stopping) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      let timer: NodeJS.Timeout | null = null;
+      const done = () => {
+        if (timer) clearTimeout(timer);
+        this.sleepers.delete(done);
+        resolve();
+      };
+      timer = setTimeout(done, ms);
+      timer.unref();
+      this.sleepers.add(done);
+    });
+  }
 }

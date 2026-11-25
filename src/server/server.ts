@@ -7,8 +7,20 @@ import { TOOLS } from './tools/registry.js';
 import { errorResult } from './tools/result.js';
 
 export async function main(): Promise<void> {
-  const bridge = new Bridge({ port: parsePort(process.env.OFFHAND_PORT) });
-  await bridge.start();
+  const bridge = new Bridge();
+
+  bridge.on('online', (ae: { version?: string } | null) => {
+    logInfo(`After Effects ready (AE ${ae?.version ?? 'unknown'})`);
+  });
+  bridge.on('offline', () => logInfo('After Effects bridge offline; retrying'));
+
+  // The panel owns the socket, so the server boots fine with AE closed. A
+  // failure here means the *server's* own state is broken — still serve stdio.
+  try {
+    await bridge.start();
+  } catch (error) {
+    logInfo(`bridge client failed to start: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
   const server = new McpServer({ name: SERVER_NAME, version: VERSION });
 
@@ -74,13 +86,4 @@ export async function main(): Promise<void> {
   process.on('SIGINT', () => void shutdown('SIGINT'));
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
   process.stdin.on('close', () => void shutdown('stdin closed'));
-}
-
-function parsePort(value: string | undefined): number | undefined {
-  if (!value) return undefined;
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65_535) {
-    throw new Error(`OFFHAND_PORT must be a port between 0 and 65535, received "${value}".`);
-  }
-  return parsed;
 }
