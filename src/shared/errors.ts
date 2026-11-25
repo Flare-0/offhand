@@ -15,6 +15,7 @@ export type OffhandErrorCode =
   | 'NOT_FOUND'
   | 'INVALID_STATE'
   | 'EXECUTE_ERROR'
+  | 'EXECUTE_DISABLED'
   | 'DOC_NOT_FOUND';
 
 export interface SerializedError {

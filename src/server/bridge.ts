@@ -12,6 +12,7 @@ import type {
   CallMessage,
   ClientToPanelMessage,
   HelloMessage,
+  PanelSettings,
   PanelToClientMessage,
   ResultMessage,
   WelcomeMessage,
@@ -91,6 +92,7 @@ export class Bridge extends EventEmitter {
   private readonly pending = new Map<string, PendingCall>();
   private heartbeat: NodeJS.Timeout | null = null;
   private lastPongAt = 0;
+  private panelSettings: PanelSettings = { allowRawScripts: false };
   private welcome: {
     resolve: (message: WelcomeMessage) => void;
     reject: (error: unknown) => void;
@@ -136,6 +138,7 @@ export class Bridge extends EventEmitter {
       attempts: this.attempts,
       lastError: this.lastError,
       diagnosis: this.diagnosis,
+      allowRawScripts: this.panelSettings.allowRawScripts,
     };
   }
 
@@ -278,6 +281,9 @@ export class Bridge extends EventEmitter {
         const welcome = await this.awaitWelcome();
         this.panelVersion = welcome.panelVersion;
         this.ae = welcome.ae ?? null;
+        this.panelSettings = {
+          allowRawScripts: welcome.settings?.allowRawScripts === true,
+        };
         this.connectedAt = new Date().toISOString();
         this.lastError = null;
         this.setDiagnosis(null);
@@ -399,6 +405,12 @@ export class Bridge extends EventEmitter {
         this.lastPongAt = Date.now();
         break;
       case 'event':
+        if (message.event === 'settings') {
+          const settings = (message.data ?? {}) as Partial<PanelSettings>;
+          this.panelSettings = {
+            allowRawScripts: settings.allowRawScripts === true,
+          };
+        }
         this.emit('event', message.event, message.data);
         break;
       default:

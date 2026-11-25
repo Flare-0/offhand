@@ -27,7 +27,13 @@ class FakePanel {
   calls: any[] = [];
   onCall: ((call: any, socket: WebSocket) => void) | null = null;
 
-  async start(options: { port?: number; publish?: boolean } = {}): Promise<void> {
+  async start(
+    options: {
+      port?: number;
+      publish?: boolean;
+      settings?: { allowRawScripts: boolean };
+    } = {},
+  ): Promise<void> {
     this.token = getOrCreateToken();
     const server = new WebSocketServer({ host: '127.0.0.1', port: options.port ?? 0 });
     this.server = server;
@@ -54,6 +60,7 @@ class FakePanel {
               protocol: PROTOCOL_VERSION,
               panelVersion: 'test',
               ae: { version: '23.6.0', project: null, comp: null },
+              settings: options.settings ?? { allowRawScripts: false },
             }),
           );
         } else if (message.type === 'call') {
@@ -129,7 +136,13 @@ afterEach(async () => {
   delete process.env.OFFHAND_HOME;
 });
 
-async function newPanel(options: { port?: number; publish?: boolean } = {}): Promise<FakePanel> {
+async function newPanel(
+  options: {
+    port?: number;
+    publish?: boolean;
+    settings?: { allowRawScripts: boolean };
+  } = {},
+): Promise<FakePanel> {
   const panel = new FakePanel();
   panels.push(panel);
   await panel.start(options);
@@ -170,6 +183,21 @@ describe('bridge client', () => {
     expect(call.id).toBeTypeOf('string');
     expect(call.deadline).toBeGreaterThan(Date.now());
     expect(bridge.status()).toMatchObject({ state: 'ready', panelVersion: 'test', online: true });
+  });
+
+  it('mirrors the panel raw-script setting and follows live changes', async () => {
+    const panel = await newPanel({ settings: { allowRawScripts: true } });
+    await bridge.start();
+    await waitFor(() => bridge.isOnline());
+
+    expect(bridge.status().allowRawScripts).toBe(true);
+
+    const socket = [...panel.sockets][0];
+    socket.send(
+      JSON.stringify({ type: 'event', event: 'settings', data: { allowRawScripts: false } }),
+    );
+    await waitFor(() => !bridge.status().allowRawScripts);
+    expect(bridge.status().allowRawScripts).toBe(false);
   });
 
   it('reports TOKEN_MISMATCH when the panel rejects the token', async () => {

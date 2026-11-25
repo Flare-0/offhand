@@ -58,6 +58,14 @@ export type SerializedError = {
   hint?: string;
 };
 
+/**
+ * Panel-owned preferences. `allowRawScripts` gates the `execute` tool: when it
+ * is off the panel rejects raw ExtendScript before it ever reaches the host.
+ */
+export type PanelSettings = {
+  allowRawScripts: boolean;
+};
+
 /** MCP server -> panel, first message on every socket. */
 export type HelloMessage = {
   type: "hello";
@@ -72,6 +80,7 @@ export type WelcomeMessage = {
   protocol: number;
   panelVersion: string;
   ae: AeSnapshot | null;
+  settings: PanelSettings;
 };
 
 export type CallMessage = {

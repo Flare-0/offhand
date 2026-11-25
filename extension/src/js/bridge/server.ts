@@ -14,6 +14,7 @@ import type {
   BridgeConfig,
   CallMessage,
   HelloMessage,
+  PanelSettings,
   PanelToClientMessage,
   SerializedError,
 } from "./types";
@@ -28,6 +29,7 @@ import {
   nodeAvailable,
   writeBridgeConfig,
 } from "./config";
+import { loadSettings, saveSettings } from "./settings";
 import { callHost, HostCallError } from "./host";
 
 const AUTH_TIMEOUT_MS = 5000;
@@ -76,6 +78,7 @@ export type PanelStatus = {
   startedAt: number | null;
   lastError: string | null;
   ae: AeSnapshot | null;
+  settings: PanelSettings;
 };
 
 type Session = {
@@ -142,6 +145,7 @@ class PanelBridge {
   private state: PanelState = "idle";
   private lastError: string | null = null;
   private ae: AeSnapshot | null = null;
+  private settings: PanelSettings = { allowRawScripts: false };
   private sessions = new Set<Session>();
   private queue: Job[] = [];
   private busy = false;
@@ -197,6 +201,7 @@ class PanelBridge {
       startedAt: this.startedAt,
       lastError: this.lastError,
       ae: this.ae,
+      settings: { ...this.settings },
     };
   }
 
@@ -206,6 +211,37 @@ class PanelBridge {
     } catch {
       return "";
     }
+  }
+
+  /**
+   * Turns the raw-ExtendScript gate on or off. Panel-owned by design: the MCP
+   * server can observe the setting but never change it.
+   */
+  setAllowRawScripts(enabled: boolean): void {
+    if (this.settings.allowRawScripts === enabled) return;
+    this.settings = { ...this.settings, allowRawScripts: enabled };
+    try {
+      this.settings = saveSettings(this.settings);
+    } catch (error) {
+      this.log("error", `Could not save settings: ${messageOf(error)}`);
+    }
+
+    this.log(
+      enabled ? "warn" : "info",
+      enabled
+        ? "Raw scripts enabled: the `execute` tool can now run arbitrary ExtendScript."
+        : "Raw scripts disabled: `execute` calls will be rejected.",
+    );
+
+    for (const session of this.sessions) {
+      if (!session.authed) continue;
+      this.send(session, {
+        type: "event",
+        event: "settings",
+        data: { ...this.settings },
+      });
+    }
+    this.emitStatus();
   }
 
   subscribe(listener: (status: PanelStatus) => void): () => void {
@@ -238,6 +274,13 @@ class PanelBridge {
       return;
     }
     this.wsModule = ws;
+    this.settings = loadSettings();
+    this.log(
+      "info",
+      this.settings.allowRawScripts
+        ? "Raw scripts are enabled."
+        : "Raw scripts are disabled (the `execute` tool is blocked).",
+    );
 
     let token: string;
     try {
@@ -435,6 +478,7 @@ class PanelBridge {
       protocol: PANEL_PROTOCOL_VERSION,
       panelVersion: PANEL_VERSION,
       ae: this.ae,
+      settings: { ...this.settings },
     });
 
     session.pingTimer = setInterval(() => {
@@ -465,7 +509,7 @@ class PanelBridge {
         ? Math.min(message.deadline, Date.now() + timeoutMs)
         : Date.now() + timeoutMs;
 
-    this.queue.push({
+    const job: Job = {
       session,
       id: String(message.id ?? ""),
       tool: String(message.tool ?? ""),
@@ -474,7 +518,28 @@ class PanelBridge {
           ? message.args
           : {},
       deadline,
-    });
+    };
+
+    // The security gate lives here, not in the host: raw ExtendScript never
+    // reaches After Effects unless the person at the panel opted in.
+    if (job.tool === "execute" && !this.settings.allowRawScripts) {
+      this.log("warn", "Blocked an `execute` call: raw scripts are disabled.");
+      this.deliver(job, {
+        type: "result",
+        id: job.id,
+        ok: false,
+        error: {
+          code: "EXECUTE_DISABLED",
+          message: "Raw ExtendScript is disabled in the offhand panel.",
+          hint:
+            'Typed tools cover most tasks. To run raw scripts, enable "Allow raw scripts" in the offhand panel and retry.',
+        },
+        ms: 0,
+      });
+      return;
+    }
+
+    this.queue.push(job);
     this.pump();
   }
 

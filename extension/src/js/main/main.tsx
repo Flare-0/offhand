@@ -57,6 +57,27 @@ const clock = (at: number): string =>
     second: "2-digit",
   });
 
+const Toggle = ({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+}) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={checked}
+    aria-label={label}
+    className={`oh-toggle${checked ? " oh-toggle--on" : ""}`}
+    onClick={() => onChange(!checked)}
+  >
+    <span className="oh-toggle-knob" />
+  </button>
+);
+
 export const App = () => {
   const [status, setStatus] = useState<PanelStatus>(() => bridge.status());
   const [logs, setLogs] = useState<PanelLog[]>([]);
@@ -129,27 +150,69 @@ export const App = () => {
           <>
             <div className="oh-row">
               <span>Project</span>
-              <span>{ae.project ? ae.project.name : "no project"}</span>
+              <span className="oh-value" title={ae.project?.path ?? undefined}>
+                {ae.project ? ae.project.name : "no project"}
+                {ae.project?.dirty ? " *" : ""}
+              </span>
             </div>
             <div className="oh-row">
               <span>Comp</span>
-              <span>
-                {ae.comp
-                  ? `${ae.comp.name} · ${ae.comp.width}×${ae.comp.height}`
-                  : "none open"}
+              <span className="oh-value">
+                {ae.comp ? ae.comp.name : "none open"}
               </span>
             </div>
-            {ae.comp && (
-              <div className="oh-row">
-                <span>Time</span>
-                <span>
-                  {ae.comp.time.toFixed(2)}s / {ae.comp.duration.toFixed(2)}s
-                </span>
-              </div>
+            {ae.comp ? (
+              <>
+                <div className="oh-row">
+                  <span>Size</span>
+                  <span>
+                    {ae.comp.width}×{ae.comp.height} · {ae.comp.fps.toFixed(2)} fps
+                  </span>
+                </div>
+                <div className="oh-row">
+                  <span>Layers</span>
+                  <span>{ae.comp.layers}</span>
+                </div>
+                <div className="oh-row">
+                  <span>Time</span>
+                  <span>
+                    {ae.comp.time.toFixed(2)}s / {ae.comp.duration.toFixed(2)}s
+                  </span>
+                </div>
+              </>
+            ) : (
+              <p className="oh-muted oh-muted--tight">
+                Open a composition in After Effects to see it here.
+              </p>
             )}
           </>
         ) : (
           <p className="oh-muted">Waiting for a snapshot from After Effects…</p>
+        )}
+      </section>
+
+      <section className="oh-card">
+        <div className="oh-card-title">Permissions</div>
+        <div className="oh-row oh-row--toggle">
+          <div>
+            <span>Allow raw scripts</span>
+            <p className="oh-muted oh-muted--tight">
+              Lets the agent run arbitrary ExtendScript through the{" "}
+              <code>execute</code> tool. Off by default; typed tools keep working
+              either way.
+            </p>
+          </div>
+          <Toggle
+            label="Allow raw scripts"
+            checked={status.settings.allowRawScripts}
+            onChange={(next) => bridge.setAllowRawScripts(next)}
+          />
+        </div>
+        {status.settings.allowRawScripts && (
+          <p className="oh-warn">
+            Raw scripts are enabled. Any connected agent can run code in After
+            Effects.
+          </p>
         )}
       </section>
 

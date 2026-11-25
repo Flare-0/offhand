@@ -108,18 +108,35 @@ bridge architecture is being **flipped**. Everything in "Rewrite plan" below is 
       - Gotcha found live: the panel publishes `startedAt` as **epoch ms (number)** while the server
         validated it as a string, which surfaced as `BRIDGE_STALE` / "missing required fields".
         The reader now accepts both; `tests/paths.test.ts` locks it in.
-- [ ] **C. React panel UI** — Phase B already ships a minimal panel (state chip, endpoint, AE
-      snapshot, activity log, working Reconnect, Copy MCP config). Remaining: "Allow raw scripts"
-      toggle, richer AE/comp detail, and a proper empty state.
+- [x] **C. React panel UI** — done. Beyond the minimal Phase B panel: persisted panel settings,
+      a panel-owned **"Allow raw scripts"** gate on `execute`, richer AE/comp detail, and an empty
+      state.
+      - `extension/src/js/bridge/settings.ts` — `%APPDATA%\offhand\settings.json`
+        (`{allowRawScripts:false}` by default), atomic tmp+rename write with Windows retries, and
+        load-never-throws so a corrupt file cannot stop the bridge booting.
+      - The gate lives in `PanelBridge.enqueueCall`: when `allowRawScripts` is false an `execute`
+        call is answered immediately with code `EXECUTE_DISABLED` + a hint pointing at the toggle,
+        and never reaches ExtendScript. Panel-owned on purpose — the MCP server can read the flag
+        but never set it (a prompt-injected agent must not be able to unlock raw code).
+      - Protocol: `welcome` now carries `settings`; toggling broadcasts
+        `{type:"event", event:"settings"}`; `status` exposes `bridge.allowRawScripts`.
+      - UI: switch in a **Permissions** card with a warning when enabled; AE card shows project
+        path/dirty marker, comp size/fps/layers/playhead/duration, and "open a composition" empty
+        state. System font stack only.
+      - `tests/bridge.test.ts` covers the flag arriving in `welcome` and following an `event`.
+      - Rebuild required for the panel to pick this up (`npm run build:extension`, then reload the
+        panel from its flyout menu or restart AE).
 - [ ] **D. Host port** — `extension/host/**/*.jsx` → `extension/src/jsx/**/*.ts` with `evalTS`
       wiring; undo groups preserved.
 - [ ] **E. Tool surface** — layer IDs, write diffs, `batch`, `detail`, render jobs, execute promotion.
 - [ ] **F. Testability** — fake panel, mock AE object model, eval task set.
-- [ ] **G. Security/install** — raw-script toggle, `offhand install`, `offhand doctor --fix`.
+- [ ] **G. Security/install** — `offhand install`, `offhand doctor --fix`, audit-log surfacing.
+      (The raw-script toggle landed early, in Phase C.)
 - [ ] **H. Docs + live AE verification** — README, `docs/*`, smoke test in AE 2023, then npm publish.
 
-> **Phase B done 2026-11-25**, verified live in AE 2023 (panel → server `ready`, `status` returns real
-> project data). Next up is Phase C.
+> **Phase C done 2026-11-25**: `typecheck`, 24 tests (5 files), `lint`, root `build` and
+> `npm --prefix extension run build` all green. Live reload of the panel not yet re-run.
+> Next up is Phase D (port the ES3 host to `src/jsx`).
 > Note: `offhand-mcp` is **not on npm** (`npm view` → 404), so MCP clients must launch
 > `node D:/Projects/offhand/dist/cli.js` until Phase H publishes it. Restarting the client after a
 > rebuild is required — an MCP server keeps running the code it was started with.

@@ -40,6 +40,7 @@ export const statusTool: ToolDefinition = {
         state: bridge.state,
         panelVersion: bridge.panelVersion,
         connectedAt: bridge.connectedAt,
+        allowRawScripts: bridge.allowRawScripts,
       },
       afterEffects: data,
     });

@@ -53,12 +53,19 @@ export interface HelloMessage {
   clientVersion: string;
 }
 
+/** Panel-owned preferences, observable by the server but not writable by it. */
+export interface PanelSettings {
+  /** Gates the `execute` tool. Off by default. */
+  allowRawScripts: boolean;
+}
+
 /** Sent by the panel once the hello is accepted. */
 export interface WelcomeMessage {
   type: 'welcome';
   protocol: number;
   panelVersion: string;
   ae: AeSnapshot | null;
+  settings?: PanelSettings;
 }
 
 /** MCP server -> panel. `deadline` is an absolute epoch-ms timestamp. */
@@ -126,4 +133,6 @@ export interface BridgeStatus {
   attempts: number;
   lastError: string | null;
   diagnosis: BridgeDiagnosis | null;
+  /** Mirrors the panel's `Allow raw scripts` toggle. */
+  allowRawScripts: boolean;
 }

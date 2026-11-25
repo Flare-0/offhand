@@ -135,6 +135,33 @@ required a string, so a perfectly good `bridge.json` was classified `malformed` 
 Any future field added to `bridge.json` must be checked against what `extension/src/js/bridge/config.ts`
 actually writes — the two sides share no code.
 
+### ✅ Phase C done (2026-11-25) — panel UI, persisted settings, raw-script gate
+
+The panel is no longer a status readout; it owns one security decision.
+
+- `extension/src/js/bridge/settings.ts` — `%APPDATA%\offhand\settings.json`, `{allowRawScripts:false}`
+  by default. Atomic tmp+rename write (same Windows `EPERM/EBUSY/EACCES` retry as `bridge.json`);
+  `loadSettings()` never throws.
+- **The gate is panel-side**, in `PanelBridge.enqueueCall`: with raw scripts off, an `execute` call is
+  answered synchronously with `EXECUTE_DISABLED` and a hint naming the toggle — the script never
+  reaches ExtendScript. It is deliberately not an MCP-settable flag: an agent must not be able to
+  unlock itself. `PanelBridge.setAllowRawScripts()` is called only from the React toggle.
+- Protocol additions (still v2, additive): `welcome` includes `settings`; toggling broadcasts
+  `{type:"event", event:"settings", data:{allowRawScripts}}`; `src/server/bridge.ts` caches it and
+  `status` returns `bridge.allowRawScripts`. `src/shared/protocol.ts` gained `PanelSettings` and
+  `BridgeStatus.allowRawScripts`; `EXECUTE_DISABLED` was added to `OffhandErrorCode`.
+- UI (`extension/src/js/main/main.tsx` + `main.scss`): Permissions card with the switch and a warning
+  when on; AE card shows project (+ dirty marker), comp size/fps/layer count/playhead/duration;
+  empty state tells the user to open a composition. System fonts only.
+- `tests/bridge.test.ts` asserts the flag arrives in `welcome` and follows a live `event`.
+
+**Checks:** root `typecheck`, `npm test` (**5 files / 24 tests**), `lint`, `build`; extension `build`
+(44 modules, `host/` copy + `ws` + icons present). **Live panel reload not yet observed** — the panel
+loads the bundle once, so rebuild + reload the panel (flyout menu) or restart AE.
+
+**Next phase: D — port `extension/host/**/*.jsx` to `extension/src/jsx/**/*.ts`** (typed handlers,
+still called through `evalTS`; undo groups preserved).
+
 **Important:** `offhand-mcp` is **not published** (`npm view offhand-mcp version` → 404). MCP clients
 must run `node D:/Projects/offhand/dist/cli.js`. The panel's "Copy MCP config" button still emits the
 `npx -y offhand-mcp` form for after Phase H. Also: after rebuilding `dist/cli.js`, the MCP client must
