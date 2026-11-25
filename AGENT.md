@@ -418,6 +418,9 @@ Key conventions (from `docs/tools.md`):
 7. **One panel at a time** — the bridge replaces the previous WebSocket connection when a new panel connects.
 8. **Windows only for now** — paths use `%APPDATA%`, registry keys for CEP debug mode.
 9. **No new npm dependencies without good reason** — keep the runtime lean (`@modelcontextprotocol/sdk`, `ws`, `zod`).
+10. **Keep `CONTEXT.md` current** — every time the conversation is compacted, refresh `CONTEXT.md` with the
+    state, decisions and next moves (sanitized: no tokens, secrets or machine-specific absolute paths), and
+    commit it. It is the handoff document for a fresh session.
 
 ---
 

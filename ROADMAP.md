@@ -2,10 +2,12 @@
 
 A clear breakdown of what is built, what is verified, and what still needs to be built or tested.
 
-> **0.1.0 public preview** released 2026-11-25 (GitHub release `v0.1.0`, repo now public). Install on
-> Windows with `irm https://raw.githubusercontent.com/Flare-0/offhand/main/scripts/setup-windows.ps1 | iex`.
-> Docs: [`CHANGELOG.md`](CHANGELOG.md), [`docs/install.md`](docs/install.md). Phases A–D are complete;
-> E–H follow below.
+> **0.1.0 public preview** released 2026-11-25 — GitHub Release
+> [`v0.1.0`](https://github.com/Flare-0/offhand/releases/tag/v0.1.0) with the built panel attached; repo is
+> public. Install on Windows with
+> `irm https://raw.githubusercontent.com/Flare-0/offhand/main/scripts/setup-windows.ps1 | iex`.
+> Docs: [`CHANGELOG.md`](CHANGELOG.md), [`docs/install.md`](docs/install.md), and
+> [`CONTEXT.md`](CONTEXT.md) for the current working state. Phases A–D are complete; E–H follow below.
 
 ---
 
