@@ -1,4 +1,4 @@
-﻿import { Offhand } from "../core/state";
+import { Offhand } from "../core/state";
 
 Offhand.tools = Offhand.tools || {};
 
@@ -77,7 +77,7 @@ Offhand.tools = Offhand.tools || {};
           items.push(maskInfo(util, parade.property(i), i));
         }
       }
-      return { layer: layer.name, items: items, total: parade ? parade.numProperties : 0 };
+      return { layer: layer.name, layerId: layer.id, items: items, total: parade ? parade.numProperties : 0 };
     }
 
     if (action === "get") {
@@ -89,18 +89,32 @@ Offhand.tools = Offhand.tools || {};
       if (!parade) {
         util.fail("INVALID_STATE", 'Layer "' + layer.name + '" cannot hold masks.');
       }
+      var countBefore = parade.numProperties;
       var created = parade.addProperty("ADBE Mask Atom");
       if (args.bounds === undefined && args.vertices === undefined) {
         args.bounds = [0, 0, comp.width, comp.height];
       }
       applyMaskProps(util, created, args);
-      return maskInfo(util, created, created.propertyIndex);
+      var createdResult = maskInfo(util, created, created.propertyIndex);
+      createdResult.layerId = layer.id;
+      createdResult.created = { name: created.name, index: created.propertyIndex };
+      createdResult.changed = { masks: { from: countBefore, to: parade.numProperties } };
+      return createdResult;
     }
 
     if (action === "set") {
       var target = findMask(util, parade, args.mask);
+      var before = maskInfo(util, target, target.propertyIndex);
       applyMaskProps(util, target, args);
-      return maskInfo(util, target, target.propertyIndex);
+      var setResult = maskInfo(util, target, target.propertyIndex);
+      setResult.layerId = layer.id;
+      setResult.changed = util.diff(before, setResult);
+      if (!setResult.changed.name && !setResult.changed.mode && !setResult.changed.inverted
+        && !setResult.changed.feather && !setResult.changed.opacity && !setResult.changed.expansion
+        && !setResult.changed.vertices && !setResult.changed.closed) {
+        setResult.note = "No values changed.";
+      }
+      return setResult;
     }
 
     if (action === "remove") {
@@ -113,8 +127,15 @@ Offhand.tools = Offhand.tools || {};
         );
       }
       var removedName = doomed.name;
+      var removedIndex = doomed.propertyIndex;
+      var countBeforeRemove = parade.numProperties;
       doomed.remove();
-      return { removed: true, name: removedName, layer: layer.name };
+      return {
+        removed: { name: removedName, index: removedIndex },
+        layer: layer.name,
+        layerId: layer.id,
+        changed: { masks: { from: countBeforeRemove, to: parade.numProperties } },
+      };
     }
 
     util.fail("INVALID_ARGS", 'Unknown mask action "' + action + '".', "Use list, get, create, set, or remove.");

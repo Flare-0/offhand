@@ -2,6 +2,11 @@ import { z } from 'zod';
 import { textResult } from './result.js';
 import type { ToolDefinition } from './types.js';
 
+const detailSchema = z
+  .enum(['min', 'full'])
+  .optional()
+  .describe('Response detail: min (ids and essentials, default) or full (every field).');
+
 export const projectTool: ToolDefinition = {
   name: 'project',
   title: 'Project',
@@ -12,6 +17,7 @@ export const projectTool: ToolDefinition = {
       .enum(['info', 'comps', 'items', 'open', 'save'])
       .default('info')
       .describe('Operation to perform on the project.'),
+    detail: detailSchema,
     kind: z
       .enum(['comp', 'footage', 'folder'])
       .optional()

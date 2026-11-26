@@ -45,7 +45,9 @@ Offhand.tools = Offhand.tools || {};
       if (args.position !== undefined) {
         setPosition(util, created, args.position);
       }
-      return readTextLayer(util, created);
+      var createdResult = readTextLayer(util, created);
+      createdResult.created = { id: created.id, name: created.name };
+      return createdResult;
     }
 
     if (action === "set") {
@@ -53,6 +55,7 @@ Offhand.tools = Offhand.tools || {};
       if (!(target instanceof TextLayer)) {
         util.fail("INVALID_ARGS", 'Layer "' + target.name + '" is not a text layer.');
       }
+      var before = readTextLayer(util, target);
       if (args.name !== undefined) target.name = String(args.name);
       var srcProp = target.property("Source Text");
       var srcDoc = srcProp.value;
@@ -61,7 +64,12 @@ Offhand.tools = Offhand.tools || {};
       if (args.position !== undefined) {
         setPosition(util, target, args.position);
       }
-      return readTextLayer(util, target);
+      var result = readTextLayer(util, target);
+      result.changed = util.diff(before, result);
+      if (!result.changed.text && !result.changed.name && !result.changed.position) {
+        result.note = "No values changed.";
+      }
+      return result;
     }
 
     util.fail("INVALID_ARGS", 'Unknown text action "' + action + '".', "Use get, create, or set.");

@@ -3,6 +3,46 @@
 All notable changes to offhand. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions use [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] — 2026-11-26
+
+Phase E — the tool surface got agent-shaped: stable ids, honest diffs, batching, cheap reads, and a way
+to find out which raw scripts deserve a typed tool.
+
+### Added
+
+- **Stable layer ids.** `layer.id` is returned everywhere a layer is described, and any `layer` selector
+  accepts `"#42"` or `"id:42"`. Ids survive renames and reordering; names and indexes still work.
+- **Write diffs.** Every write tool returns a `changed` map: `{ "position": { "from": [...], "to": [...] } }`.
+  Creators return `created: { id, name, … }`; removals return `removed`. If nothing moved you get a
+  `note` instead of silence.
+- **`batch` tool** (15 total) — up to 20 typed calls in one round trip, sequential, one undo group,
+  `stopOnError` on by default, no nesting. An `execute` inside a batch is blocked by the same panel gate
+  that blocks a direct `execute`, so batching cannot be used to sneak around it.
+- **`detail: "min" | "full"`** on `layer`, `comp`, `project` and `property`. Default is `min`: ids and the
+  fields you need to decide. `full` is the old verbose shape.
+- **Render jobs.** `render` gained `queue` (records job `j1`, `j2`, …), `start`, and `jobs`. Jobs carry
+  `status`, timing and errors; `start` is still synchronous because ExtendScript cannot render in the
+  background.
+- **`offhand patterns`** — reads `usage.jsonl`, groups repeated `execute` calls by reason, counts their
+  error codes and suggests which typed tool should absorb each one. Documented in
+  [docs/tools.md](docs/tools.md#promotion-turning-execute-into-a-typed-tool).
+- **Tests:** 6 files / 29 tests, including the new `patterns` suite and schema coverage for `batch`,
+  `detail` and the render job actions.
+
+### Changed
+
+- `project items`, `project comps`, `comp list`, `layer list` and `property list` default to compact
+  briefs. Ask for `detail: "full"` when you need every field.
+- The tool-handler test now verifies `extension/src/jsx/tools/<name>.ts` (the TypeScript host) instead of
+  the frozen legacy `.jsx` tree.
+- Versions bumped to 0.2.0 across the server, the panel and the host.
+
+### Known limitations
+
+- `render start` blocks the panel until After Effects finishes; there is no progress stream yet.
+- `batch` is all-or-nothing only up to the failing call — earlier calls stay applied inside the undo group.
+- Live smoke tests still cover `status`, `project` and `comp`; the rest share the same call path.
+
 ## [0.1.0] — 2026-11-25
 
 First public preview. End-to-end: MCP client → stdio server → local WebSocket → CEP panel → ExtendScript.

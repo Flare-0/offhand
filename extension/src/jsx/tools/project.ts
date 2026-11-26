@@ -45,7 +45,19 @@ Offhand.tools = Offhand.tools || {};
       var comps = [];
       for (var i = 1; i <= activeProject.numItems; i += 1) {
         var item = activeProject.item(i);
-        if (item instanceof CompItem) comps.push(util.compInfo(item));
+        if (!(item instanceof CompItem)) continue;
+        if (args.detail === "full") {
+          comps.push(util.compInfo(item));
+        } else {
+          comps.push({
+            id: item.id,
+            name: item.name,
+            width: item.width,
+            height: item.height,
+            duration: util.round(item.duration, 3),
+            layers: item.numLayers,
+          });
+        }
       }
       var page = util.page(comps, args.limit === undefined ? 25 : args.limit, args.offset);
       if (page.total === 0) page.hint = "This project has no compositions. Create one with comp action=\"create\".";
@@ -59,7 +71,11 @@ Offhand.tools = Offhand.tools || {};
         var candidate = activeProject.item(j);
         var type = util.itemType(candidate);
         if (kind && type !== kind) continue;
-        rows.push(util.itemInfo(candidate));
+        if (args.detail === "full") {
+          rows.push(util.itemInfo(candidate));
+        } else {
+          rows.push({ id: candidate.id, name: candidate.name, type: type });
+        }
       }
       var itemPage = util.page(rows, args.limit === undefined ? 50 : args.limit, args.offset);
       if (itemPage.total === 0) itemPage.hint = "No items matched. Try kind=\"comp\", \"footage\", or \"folder\".";

@@ -74,57 +74,65 @@ Offhand.tools = Offhand.tools || {};
     return info;
   }
 
-  function applyCommon(util, comp, layer, args) {
-    var changed = [];
+  function info(util, layer) {
+    return detail(util, layer);
+  }
 
-    if (args.name !== undefined) {
-      layer.name = String(args.name);
-      changed.push("name");
+  function brief(util, layer) {
+    return util.layerBrief(layer);
+  }
+
+  /** Layer fields that `applyCommon` understands, in tool-facing names. */
+  function touchedFields(args) {
+    var fields = [];
+    if (args.name !== undefined) fields.push("name");
+    if (args.startTime !== undefined) fields.push("startTime");
+    if (args.stretch !== undefined) fields.push("stretch");
+    if (args.inPoint !== undefined) fields.push("inPoint");
+    if (args.outPoint !== undefined) fields.push("outPoint");
+    if (args.enabled !== undefined) fields.push("enabled");
+    if (args.locked !== undefined) fields.push("locked");
+    if (args.solo !== undefined) fields.push("solo");
+    if (args.shy !== undefined) fields.push("shy");
+    if (args.label !== undefined) fields.push("label");
+    if (args.comment !== undefined) fields.push("comment");
+    if (args.blendMode !== undefined) fields.push("blendMode");
+    if (args.parent !== undefined) fields.push("parent");
+    return fields;
+  }
+
+  /**
+   * Applies every common layer field and returns `{ field: { from, to } }`.
+   * `parent` is compared by name because a Layer object is not serializable.
+   */
+  function applyCommon(util, comp, layer, args) {
+    var fields = touchedFields(args);
+    var trackable = [];
+    for (var i = 0; i < fields.length; i += 1) {
+      if (fields[i] !== "parent") trackable.push(fields[i] === "blendMode" ? "blendingMode" : fields[i]);
     }
-    if (args.startTime !== undefined) {
-      layer.startTime = util.number(args.startTime, "startTime");
-      changed.push("startTime");
+    var commit = util.track(layer, trackable);
+    var parentBefore = layer.parent ? layer.parent.name : null;
+
+    if (args.name !== undefined) layer.name = String(args.name);
+    if (args.startTime !== undefined) layer.startTime = util.number(args.startTime, "startTime");
+    if (args.stretch !== undefined) layer.stretch = util.number(args.stretch, "stretch");
+    if (args.inPoint !== undefined) layer.inPoint = util.number(args.inPoint, "inPoint");
+    if (args.outPoint !== undefined) layer.outPoint = util.number(args.outPoint, "outPoint");
+    if (args.enabled !== undefined) layer.enabled = !!args.enabled;
+    if (args.locked !== undefined) layer.locked = !!args.locked;
+    if (args.solo !== undefined) layer.solo = !!args.solo;
+    if (args.shy !== undefined) layer.shy = !!args.shy;
+    if (args.label !== undefined) layer.label = util.clampInt(args.label, layer.label, 0, 16);
+    if (args.comment !== undefined) layer.comment = String(args.comment);
+    if (args.blendMode !== undefined) layer.blendingMode = util.blendMode(args.blendMode);
+
+    var changed = commit();
+    if (changed.blendingMode) {
+      changed.blendMode = changed.blendingMode;
+      delete changed.blendingMode;
     }
-    if (args.stretch !== undefined) {
-      layer.stretch = util.number(args.stretch, "stretch");
-      changed.push("stretch");
-    }
-    if (args.inPoint !== undefined) {
-      layer.inPoint = util.number(args.inPoint, "inPoint");
-      changed.push("inPoint");
-    }
-    if (args.outPoint !== undefined) {
-      layer.outPoint = util.number(args.outPoint, "outPoint");
-      changed.push("outPoint");
-    }
-    if (args.enabled !== undefined) {
-      layer.enabled = !!args.enabled;
-      changed.push("enabled");
-    }
-    if (args.locked !== undefined) {
-      layer.locked = !!args.locked;
-      changed.push("locked");
-    }
-    if (args.solo !== undefined) {
-      layer.solo = !!args.solo;
-      changed.push("solo");
-    }
-    if (args.shy !== undefined) {
-      layer.shy = !!args.shy;
-      changed.push("shy");
-    }
-    if (args.label !== undefined) {
-      layer.label = util.clampInt(args.label, layer.label, 0, 16);
-      changed.push("label");
-    }
-    if (args.comment !== undefined) {
-      layer.comment = String(args.comment);
-      changed.push("comment");
-    }
-    if (args.blendMode !== undefined) {
-      layer.blendingMode = util.blendMode(args.blendMode);
-      changed.push("blendMode");
-    }
+
     if (args.parent !== undefined) {
       if (args.parent === null || args.parent === "") {
         layer.parent = null;
@@ -135,24 +143,40 @@ Offhand.tools = Offhand.tools || {};
         }
         layer.parent = parentLayer;
       }
-      changed.push("parent");
+      var parentAfter = layer.parent ? layer.parent.name : null;
+      if (parentBefore !== parentAfter) {
+        changed.parent = { from: parentBefore, to: parentAfter };
+      }
     }
 
     return changed;
   }
 
+  function countKeys(value) {
+    var total = 0;
+    for (var key in value) {
+      if (value.hasOwnProperty(key)) total += 1;
+    }
+    return total;
+  }
+
   Offhand.tools.layer = function (args) {
     var util = Offhand.util;
     var action = args.action || "list";
+    var detailed = args.detail === "full";
 
     if (action === "list") {
       var comp = util.comp(args.comp);
       var rows = [];
       for (var i = 1; i <= comp.numLayers; i += 1) {
         var layer = comp.layer(i);
-        var row = util.layerInfo(layer);
-        row.selected = layer.selected;
-        rows.push(row);
+        if (detailed) {
+          var row = util.layerInfo(layer);
+          row.selected = layer.selected;
+          rows.push(row);
+        } else {
+          rows.push(util.layerBrief(layer));
+        }
       }
       var page = util.page(rows, args.limit === undefined ? 50 : args.limit, args.offset);
       if (page.total === 0) page.hint = "This comp has no layers. Call layer with action=\"create\".";
@@ -160,17 +184,18 @@ Offhand.tools = Offhand.tools || {};
     }
 
     if (action === "get") {
-      return detail(util, util.layer(util.comp(args.comp), args.layer));
+      var target = util.layer(util.comp(args.comp), args.layer);
+      return args.detail === "min" ? brief(util, target) : info(util, target);
     }
 
     if (action === "create") {
-      var target = util.comp(args.comp);
+      var targetComp = util.comp(args.comp);
       var type = args.type || "solid";
       var name = args.name ? String(args.name) : null;
       var created = null;
 
       if (type === "text") {
-        created = target.layers.addText(args.text === undefined ? "Text" : String(args.text));
+        created = targetComp.layers.addText(args.text === undefined ? "Text" : String(args.text));
         if (!name) name = "Text";
         if (args.text !== undefined) {
           var source = created.property("Source Text");
@@ -179,10 +204,10 @@ Offhand.tools = Offhand.tools || {};
           source.setValue(doc);
         }
       } else if (type === "solid") {
-        var width = args.width === undefined ? target.width : util.number(args.width, "width");
-        var height = args.height === undefined ? target.height : util.number(args.height, "height");
-        var duration = args.duration === undefined ? target.duration : util.number(args.duration, "duration");
-        created = target.layers.addSolid(
+        var width = args.width === undefined ? targetComp.width : util.number(args.width, "width");
+        var height = args.height === undefined ? targetComp.height : util.number(args.height, "height");
+        var duration = args.duration === undefined ? targetComp.duration : util.number(args.duration, "duration");
+        created = targetComp.layers.addSolid(
           util.color(args.color === undefined ? "#000000" : args.color),
           name || "Solid",
           width,
@@ -193,23 +218,23 @@ Offhand.tools = Offhand.tools || {};
         if (!name) name = "Solid";
         if (args.adjustment === true) created.adjustmentLayer = true;
       } else if (type === "null") {
-        created = target.layers.addNull(
-          args.duration === undefined ? target.duration : util.number(args.duration, "duration"),
+        created = targetComp.layers.addNull(
+          args.duration === undefined ? targetComp.duration : util.number(args.duration, "duration"),
         );
         if (!name) name = "Null";
       } else if (type === "shape") {
-        created = target.layers.addShape();
+        created = targetComp.layers.addShape();
         if (!name) name = "Shape";
       } else if (type === "camera") {
-        created = target.layers.addCamera(name || "Camera", [
-          target.width / 2,
-          target.height / 2,
+        created = targetComp.layers.addCamera(name || "Camera", [
+          targetComp.width / 2,
+          targetComp.height / 2,
         ]);
         if (!name) name = "Camera";
       } else if (type === "light") {
-        created = target.layers.addLight(name || "Light", [
-          target.width / 2,
-          target.height / 2,
+        created = targetComp.layers.addLight(name || "Light", [
+          targetComp.width / 2,
+          targetComp.height / 2,
         ]);
         if (!name) name = "Light";
       } else if (type === "comp" || type === "footage") {
@@ -217,9 +242,9 @@ Offhand.tools = Offhand.tools || {};
           util.fail("INVALID_ARGS", 'type="' + type + '" requires source.', "Pass the project item name or id.");
         }
         var item = findItem(util, args.source);
-        created = target.layers.add(
+        created = targetComp.layers.add(
           item,
-          args.duration === undefined ? target.duration : util.number(args.duration, "duration"),
+          args.duration === undefined ? targetComp.duration : util.number(args.duration, "duration"),
         );
         if (!name) name = item.name;
       } else {
@@ -238,41 +263,49 @@ Offhand.tools = Offhand.tools || {};
         ]);
       }
 
-      var changed = applyCommon(util, target, created, args);
-      var result = detail(util, created);
-      if (changed.length > 0) result.changed = changed;
+      var changed = applyCommon(util, targetComp, created, args);
+      var result = info(util, created);
+      result.created = { id: created.id, name: created.name, type: type };
+      if (countKeys(changed) > 0) result.changed = changed;
       return result;
     }
 
     if (action === "set") {
+      if (touchedFields(args).length === 0) {
+        util.fail("INVALID_ARGS", "Nothing to change.", "Pass name, timing, parent, blendMode, enabled, or another layer field.");
+      }
       var setComp = util.comp(args.comp);
       var setLayer = util.layer(setComp, args.layer);
       var setChanged = applyCommon(util, setComp, setLayer, args);
-      if (setChanged.length === 0) {
-        util.fail("INVALID_ARGS", "Nothing to change.", "Pass name, timing, parent, blendMode, enabled, or another layer field.");
-      }
-      var setResult = detail(util, setLayer);
+      var setResult = info(util, setLayer);
       setResult.changed = setChanged;
+      if (countKeys(setChanged) === 0) setResult.note = "No field changed: the layer already had these values.";
       return setResult;
     }
 
     if (action === "duplicate") {
       var duplicateComp = util.comp(args.comp);
       var original = util.layer(duplicateComp, args.layer);
+      var originalId = original.id;
       var copy = original.duplicate();
       if (args.name !== undefined) copy.name = String(args.name);
-      return detail(util, copy);
+      var copyResult = info(util, copy);
+      copyResult.created = { id: copy.id, name: copy.name, type: copyResult.type };
+      copyResult.changed = { duplicateOf: { from: originalId, to: copy.id } };
+      return copyResult;
     }
 
     if (action === "reorder") {
       var reorderComp = util.comp(args.comp);
       var moved = util.layer(reorderComp, args.layer);
+      var fromIndex = moved.index;
       var index = util.number(args.index, "index");
       if (index <= 1) moved.moveToBeginning();
       else if (index >= reorderComp.numLayers) moved.moveToEnd();
       else moved.moveBefore(reorderComp.layer(Math.round(index)));
-      var movedInfo = detail(util, moved);
-      movedInfo.hint = "Layer indices change after a reorder. Re-read the comp list.";
+      var movedInfo = info(util, moved);
+      movedInfo.changed = { index: { from: fromIndex, to: moved.index } };
+      movedInfo.hint = "Layer indices change after a reorder. Address layers by id (#id) to stay stable.";
       return movedInfo;
     }
 
@@ -287,8 +320,13 @@ Offhand.tools = Offhand.tools || {};
         );
       }
       var doomedName = doomed.name;
+      var doomedId = doomed.id;
       doomed.remove();
-      return { deleted: true, name: doomedName, layers: deleteComp.numLayers };
+      return {
+        deleted: true,
+        removed: { id: doomedId, name: doomedName },
+        layers: deleteComp.numLayers,
+      };
     }
 
     util.fail(

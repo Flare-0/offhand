@@ -2,18 +2,24 @@ import { z } from 'zod';
 import { textResult } from './result.js';
 import type { ToolDefinition } from './types.js';
 
+const detailSchema = z
+  .enum(['min', 'full'])
+  .optional()
+  .describe('Response detail: min (ids and essentials, default) or full (every field).');
+
 const selector = z.union([z.number(), z.string()]);
 
 export const propertyTool: ToolDefinition = {
   name: 'property',
   title: 'Property & Keyframes',
   description:
-    'Read, set, keyframe, or attach expressions to any layer property by dot path (e.g. "transform.position", "transform.opacity", "effects.Glow.Glow Threshold").',
+    'Read, set, keyframe, or attach expressions to any layer property by dot path (e.g. "transform.position", "transform.opacity", "effects.Glow.Glow Threshold"). Writes return a changed map of {field: {from, to}}.',
   inputSchema: {
     action: z
       .enum(['list', 'get', 'set', 'keyframe', 'expression', 'removeKeyframe'])
       .default('get')
       .describe('Operation to perform.'),
+    detail: detailSchema,
     comp: selector
       .optional()
       .describe('Composition id or name. Defaults to the active composition.'),

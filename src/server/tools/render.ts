@@ -8,10 +8,10 @@ export const renderTool: ToolDefinition = {
   name: 'render',
   title: 'Render & Frame Preview',
   description:
-    'Save a single composition frame to PNG, queue a composition to the After Effects Render Queue, inspect queue status, or clear the render queue.',
+    'Save a single composition frame to PNG, queue a composition to the After Effects Render Queue, start a queued render job, inspect jobs and queue status, or clear the render queue. Rendering is synchronous: action=start blocks until After Effects finishes, so prefer queueing and checking jobs later.',
   inputSchema: {
     action: z
-      .enum(['frame', 'queue', 'status', 'clear'])
+      .enum(['frame', 'queue', 'start', 'jobs', 'status', 'clear'])
       .default('status')
       .describe('Operation to perform.'),
     comp: selector
@@ -42,7 +42,11 @@ export const renderTool: ToolDefinition = {
     start: z
       .boolean()
       .optional()
-      .describe('Start rendering immediately after queuing (default false). Note: synchronous in AE.'),
+      .describe('Start rendering immediately after queuing (default false). Rendering blocks the call until AE finishes.'),
+    job: z
+      .string()
+      .optional()
+      .describe('Render job id for action="start". Defaults to every queued job.'),
     confirm: z
       .boolean()
       .optional()

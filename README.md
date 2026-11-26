@@ -67,17 +67,21 @@ reinstalling. See [docs/install.md](docs/install.md) for the full walkthrough an
 
 ## Status
 
-`0.1.0` — a working end-to-end preview. **Phases A–D of the rewrite are complete and verified live**:
-the panel hosts the bridge inside After Effects, the MCP server dials in, and the ExtendScript host is
-compiled from TypeScript to ES3.
+`0.2.0` — a working end-to-end preview. **Phases A–E of the rewrite are complete**; A–D were verified
+live: the panel hosts the bridge inside After Effects, the MCP server dials in, and the ExtendScript host
+is compiled from TypeScript to ES3.
 
-All 14 tools are implemented on both sides: `status`, `docs`, `project`, `comp`, `layer`, `property`,
-`effect`, `text`, `shape`, `mask`, `render`, `assets`, `view`, and the `execute` escape hatch.
+All 15 tools are implemented on both sides: `status`, `docs`, `project`, `comp`, `layer`, `property`,
+`effect`, `text`, `shape`, `mask`, `render`, `assets`, `view`, `batch`, and the `execute` escape hatch.
+
+Writes return a **diff** so you can see what moved, layers are addressed by **stable id** (`"#42"`),
+reads accept `detail: min|full`, `batch` packs up to 20 calls into one undo group, `render` records
+jobs, and `offhand patterns` turns repeated `execute` scripts into candidates for the typed surface.
 
 Known gaps, tracked in [ROADMAP.md](ROADMAP.md):
 
 - Not every tool has a live smoke test on AE 2023 yet (`status`, `project`, `comp` do).
-- Stable layer IDs, write diffs, a `batch` tool, `detail: min|full` and render jobs land in Phase E.
+- `render start` blocks until After Effects finishes; no progress stream yet.
 - Mac is untested; the installer is Windows-only.
 - npm publish is Phase H.
 
@@ -136,9 +140,10 @@ diagnosis:
 | `text` | Create and edit text layers. |
 | `shape` | Create and edit shape layers. |
 | `mask` | Create, configure, remove masks. |
-| `render` | Preview frames to PNG, queue renders. |
+| `render` | Preview frames to PNG, queue renders, track render jobs. |
 | `assets` | Import, organize, replace footage. |
 | `view` | Open comps, set the playhead, select layers. |
+| `batch` | Up to 20 typed calls in one round trip and one undo group. |
 | `execute` | Last-resort ExtendScript. Requires a reason; disabled by default. |
 
 See [docs/tools.md](docs/tools.md) for schemas and examples, and [docs/recipes.md](docs/recipes.md) for
@@ -159,11 +164,12 @@ task-shaped walkthroughs.
 ```powershell
 npm run dev              # rebuild the MCP server on change
 npm run typecheck
-npm test                 # 5 files / 24 tests
+npm test                 # 6 files / 29 tests
 npm run lint
 npm run build
 npm run build:extension  # CEP panel + ES3 ExtendScript bundle
 npm run doctor           # check every hop: bridge.json, port, handshake, host ping
+node dist/cli.js patterns  # repeated `execute` calls worth turning into typed tools
 ```
 
 The panel lives in `extension/` (bolt-cep: React + Vite + TypeScript). The ExtendScript host is

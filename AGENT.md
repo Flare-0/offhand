@@ -194,8 +194,45 @@ The ExtendScript host now ships inside the bolt-cep bundle instead of a hand-cop
 **Live reload not yet observed** — the panel evaluates the jsx bundle once, so reload the panel from
 its flyout menu (or restart AE) before trusting the ported handlers in AE.
 
-**Next phase: E — tool surface** (stable layer IDs, write diffs, `batch`, `detail`, render jobs,
-`execute` promotion).
+---
+
+### ✅ Phase E done (2026-11-26) — tool surface, 0.2.0
+
+The tools now behave like an agent surface rather than API wrappers. All of this is on **both** sides
+(host handler + server schema) and covered by tests.
+
+- **Stable ids.** `layerInfo` includes `id`; `layerBrief` is `{id,index,name,type,enabled,locked,selected}`.
+  `findLayer` accepts `number | string | {id}` and strings `#42` / `id:42`; `findLayerById` fails
+  `NOT_FOUND` with a `layer action="list"` hint. Documented default: address by id.
+- **Diffs.** `core/util.ts` has `clone`, `same` (via `Offhand.json.stringify`), `diff(before,after)`
+  → `{field:{from,to}}`, and `track(target, fields)` which snapshots then commits. Write tools return
+  `changed`; `create` returns `created`; `delete`/`remove` return `removed`; no-op writes return
+  `note: "No values changed."` — never a silent success.
+- **`detail: min|full`** on `layer`, `comp`, `project`, `property`. `min` (default) is brief ids +
+  essentials; `full` is the old verbose payload. Implemented in the handlers, not in the server.
+- **`batch`** (15th tool). `extension/src/jsx/tools/batch.ts` + `src/server/tools/batch.ts`. Max 20
+  sequential calls, `stopOnError` default true, no nesting, one undo group. **Security:** the panel's
+  `blockedBySecurityGate()` scans `args.calls` for `execute`; disabled raw scripts block the whole
+  batch with `EXECUTE_DISABLED`.
+- **Render jobs.** `Offhand.jobs` (`j1`, `j2`, …) with `queued|rendering|done|failed`, `queuedAt`,
+  `startedAt`, `finishedAt`, `ms`, `error`; `syncJob` maps AE queue status strings. Actions:
+  `frame`, `queue` (+`start:true`), `start`, `jobs`, `status`, `clear`. `start` calls the blocking
+  `rq.render()` — be honest with users about that.
+- **Execute promotion.** `src/server/log.ts` exports `readExecutePatterns(limit)` and
+  `suggestTool(reason)`, grouping by normalised `reason` (the logged script is replaced by
+  `<N chars>`). `offhand patterns` prints them; `docs/tools.md` documents the promotion loop.
+- **Tests.** `tests/tools.test.ts` now asserts 15 tools and checks handlers exist in
+  `extension/src/jsx/tools/` (the `.jsx` fallback is no longer the contract). New
+  `tests/patterns.test.ts`. **6 files / 29 tests.** Versions bumped to 0.2.0 in root, extension,
+  `src/shared/version.ts` and `core/state.ts`.
+
+**Checks:** `typecheck`, `test` (6/29), `lint`, `build` (74 KB cli), `build:extension` (251 KB panel)
+all green; `eval` warnings from `core/json.ts` / `tools/execute.ts` are expected.
+
+**Live AE pass still pending** for the new actions (ids, diffs, batch, detail, render jobs).
+
+**Next phase: F — testability** (fake panel already exists in tests; add a mock AE object model and an
+eval task set so the host handlers can be tested without After Effects).
 
 ---
 
@@ -343,13 +380,16 @@ Then add it to `src/server/tools/registry.ts`:
 export const TOOLS: ToolDefinition[] = [statusTool, docsTool, executeTool, myTool];
 ```
 
-### 2. Host-side ExtendScript (`extension/host/tools/<name>.jsx`)
+### 2. Host-side ExtendScript (`extension/src/jsx/tools/<name>.ts`)
 
-```js
+```ts
 Offhand.tools.my_tool = function (args) {
   var comp = Offhand.util.comp(args.comp);
+  var changed = {};
+  var commit = Offhand.util.track(target, ["name"]);
   // ... AE API calls ...
-  return { key: value };
+  changed = commit();
+  return { changed: changed };
 };
 ```
 
@@ -369,6 +409,10 @@ import "./tools/my_tool";
 > Phase D moved the host into `src/jsx`. `extension/host/**/*.jsx` is legacy fallback only — do not
 > add new handlers there. Keep new host code ES3 at runtime (no `Array.prototype.map`, `Object.keys`,
 > `trim`, arrow functions, template literals); Babel handles syntax, not missing builtins.
+>
+> Phase E added the conventions every new tool must follow: accept `detail: min|full` for reads,
+> return `changed` from writes (via `Offhand.util.track`/`diff`), return `created`/`removed` for
+> create/delete, accept `#id` layer selectors via `Offhand.util.findLayer`.
 
 ### 3. Document it in `docs/tools.md`
 
@@ -399,11 +443,13 @@ Key conventions (from `docs/tools.md`):
 | `src/shared/protocol.ts` | WebSocket message types |
 | `src/server/tools/status.ts` | Simplest example of a tool |
 | `src/server/tools/execute.ts` | Example with timeout and bridge call |
-| `extension/host/core/util.jsx` | `Offhand.util` helpers (findComp, findLayer, fail, color, time) |
-| `extension/host/offhand.jsx` | `Offhand.dispatch()` dispatcher |
-| `extension/host/tools/status.jsx` | Simplest host-side tool |
-| `tests/bridge.test.ts` | Bridge unit tests |
-| `tests/docs.test.ts` | Docs tool unit tests |
+| `extension/src/jsx/core/util.ts` | `Offhand.util` helpers (findComp, findLayer, findLayerById, diff, track, page) |
+| `extension/src/jsx/host.ts` | The dispatcher and undo-group boundary |
+| `extension/src/jsx/core/state.ts` | Shared host namespace, `writeTools`, render jobs |
+| `extension/src/jsx/tools/status.ts` | Simplest host-side tool |
+| `extension/src/jsx/tools/batch.ts` | Composition of other handlers (and the security caveat) |
+| `tests/bridge.test.ts` | Bridge unit tests (fake panel over a real WebSocket) |
+| `tests/patterns.test.ts` | `execute` usage-log analysis and tool suggestion |
 
 ---
 
@@ -461,14 +507,13 @@ Tests live in `tests/`. They test the TypeScript layer only — no AE or CEP nee
 
 ## What to do next (suggested order)
 
-Phases A–D are done; the live plan is in [`ROADMAP.md`](ROADMAP.md) § *Rewrite phases*.
+Phases A–E are done; the live plan is in [`ROADMAP.md`](ROADMAP.md) § *Rewrite phases*.
 
-1. **Live-check Phase D** — reload the panel (flyout → Reload) or restart AE, then run `status` and a
-   couple of writes through the new bundled host. If anything fails, the legacy `host/` fallback and
-   `dist/cep/host/` copy are still in place.
-2. **Phase E — tool surface** — stable layer IDs, write diffs, `batch`, `detail: min|full`, render
-   jobs, and promoting repeated `execute` patterns into typed tools.
-3. **Phase F — testability** — fake panel, mock AE object model, 10–20 task eval set.
-4. **Phase G — install/doctor** — `offhand install`, `offhand doctor --fix`, audit-log surfacing.
-5. **Phase H — docs + live verification + npm publish** — then switch the MCP config from
+1. **Live-check Phase E** — reload the panel (flyout → Reload) or restart AE, then exercise `layer list`
+   (ids), a `layer set` (diff), a `batch`, `detail: "full"`, and `render jobs`. The legacy `host/`
+   fallback and `dist/cep/host/` copy are still in place if something breaks.
+2. **Phase F — testability** — fake panel exists; add a mock AE object model and a 10–20 task eval set
+   so host handlers can be exercised without After Effects.
+3. **Phase G — install/doctor** — `offhand install`, `offhand doctor --fix`, audit-log surfacing.
+4. **Phase H — docs + live verification + npm publish** — then switch the MCP config from
    `node D:/Projects/offhand/dist/cli.js` to `npx -y offhand-mcp`.

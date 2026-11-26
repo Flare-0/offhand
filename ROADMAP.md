@@ -2,12 +2,15 @@
 
 A clear breakdown of what is built, what is verified, and what still needs to be built or tested.
 
+> **0.2.0 (unreleased)** is the Phase E surface: stable layer ids, write diffs, `batch`, `detail`,
+> render jobs and `offhand patterns`.
+>
 > **0.1.0 public preview** released 2026-11-25 — GitHub Release
 > [`v0.1.0`](https://github.com/Flare-0/offhand/releases/tag/v0.1.0) with the built panel attached; repo is
 > public. Install on Windows with
 > `irm https://raw.githubusercontent.com/Flare-0/offhand/main/scripts/setup-windows.ps1 | iex`.
 > Docs: [`CHANGELOG.md`](CHANGELOG.md), [`docs/install.md`](docs/install.md), and
-> [`CONTEXT.md`](CONTEXT.md) for the current working state. Phases A–D are complete; E–H follow below.
+> [`CONTEXT.md`](CONTEXT.md) for the current working state. Phases A–E are complete; F–H follow below.
 
 ---
 
@@ -152,7 +155,25 @@ bridge architecture is being **flipped**. Everything in "Rewrite plan" below is 
         `Array.isArray`/`trim`). Babel + the ponyfill plugin emit ES3.
       - `tests/tools.test.ts`'s "matching `.jsx` exists" check still passes: the legacy
         `extension/host/` tree stays in the repo (not deleted) as the fallback, per the phase-A rule.
-- [ ] **E. Tool surface** — layer IDs, write diffs, `batch`, `detail`, render jobs, execute promotion.
+- [x] **E. Tool surface** — layer IDs, write diffs, `batch`, `detail`, render jobs, execute promotion.
+      **Done (2026-11-26, 0.2.0; checks green, live AE pass pending).**
+      - Stable layer ids: `layerInfo` carries `id`, every selector accepts `#42` / `id:42`, and
+        `findLayerById` fails with a `NOT_FOUND` + `layer action="list"` hint. Ids are the documented
+        default because they survive renames and reordering.
+      - Write diffs: `core/util.ts` gained `clone`/`same`/`diff`/`track`; `diff(before, after)` returns
+        `{ field: { from, to } }` using the host's own JSON stringifier. Every write tool returns
+        `changed`, creators return `created`, removals return `removed`, and no-op writes return a `note`.
+      - `detail: min|full` on `layer`, `comp`, `project`, `property`; `min` is a brief (ids + essentials)
+        and `full` keeps the old verbose shape. `layer list` defaults to `layerBrief`.
+      - `batch` (15th tool): up to 20 sequential typed calls, one undo group, no nesting,
+        `stopOnError` default true, per-call `ms` and error. The panel's security gate scans
+        `args.calls` for `execute`, so batching cannot bypass the raw-script switch.
+      - Render jobs: `render` now has `queue`/`start`/`jobs`; jobs (`j1`, `j2`, …) live in
+        `Offhand.jobs` and are synced from the AE render queue. `start` is synchronous and says so.
+      - Execute promotion: `log.ts` groups repeated `execute` reasons (`readExecutePatterns`,
+        `suggestTool`) and `offhand patterns` prints counts, error codes and the candidate typed tool.
+      - Tests: 6 files / 29 tests (new `patterns` suite; schema coverage for batch/detail/render).
+        `typecheck`, `test`, `lint`, `build`, `build:extension` all pass.
 - [ ] **F. Testability** — fake panel, mock AE object model, eval task set.
 - [ ] **G. Security/install** — `offhand install`, `offhand doctor --fix`, audit-log surfacing.
       (The raw-script toggle landed early, in Phase C.)
@@ -160,7 +181,9 @@ bridge architecture is being **flipped**. Everything in "Rewrite plan" below is 
 
 > **Phase D done 2026-11-25**: host ported into `src/jsx` (build green: 44 modules, jsx bundle
 > ~100 KB, handlers verified present). Root `typecheck`, 24 tests, `lint` green. Live reload of the
-> panel to exercise the new bundle still pending. Next up is Phase E (tool surface).
+> panel to exercise the new bundle still pending (it is exercised implicitly by every later live call).
+> **Phase E done 2026-11-26** (0.2.0): stable layer ids, write diffs, `batch`, `detail`, render jobs and
+> `offhand patterns`. Live AE pass of the new actions still pending; next up is Phase F (testability).
 > Note: `offhand-mcp` is **not on npm** (`npm view` → 404), so MCP clients must launch
 > `node D:/Projects/offhand/dist/cli.js` until Phase H publishes it. Restarting the client after a
 > rebuild is required — an MCP server keeps running the code it was started with.

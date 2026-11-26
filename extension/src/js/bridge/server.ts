@@ -521,19 +521,16 @@ class PanelBridge {
     };
 
     // The security gate lives here, not in the host: raw ExtendScript never
-    // reaches After Effects unless the person at the panel opted in.
-    if (job.tool === "execute" && !this.settings.allowRawScripts) {
-      this.log("warn", "Blocked an `execute` call: raw scripts are disabled.");
+    // reaches After Effects unless the person at the panel opted in. A `batch`
+    // is checked as a whole, so nested `execute` cannot slip past the gate.
+    const blocked = this.blockedBySecurityGate(job);
+    if (blocked) {
+      this.log("warn", `Blocked a \`${job.tool}\` call: raw scripts are disabled.`);
       this.deliver(job, {
         type: "result",
         id: job.id,
         ok: false,
-        error: {
-          code: "EXECUTE_DISABLED",
-          message: "Raw ExtendScript is disabled in the offhand panel.",
-          hint:
-            'Typed tools cover most tasks. To run raw scripts, enable "Allow raw scripts" in the offhand panel and retry.',
-        },
+        error: blocked,
         ms: 0,
       });
       return;
@@ -541,6 +538,36 @@ class PanelBridge {
 
     this.queue.push(job);
     this.pump();
+  }
+
+  /** Returns the refusal payload, or null when the call may run. */
+  private blockedBySecurityGate(job: Job): SerializedError | null {
+    if (this.settings.allowRawScripts) return null;
+
+    let needsRawScripts = job.tool === "execute";
+
+    if (job.tool === "batch") {
+      const calls = (job.args as { calls?: unknown }).calls;
+      if (Array.isArray(calls)) {
+        needsRawScripts = calls.some(
+          (call) =>
+            typeof call === "object" &&
+            call !== null &&
+            (call as { tool?: unknown }).tool === "execute",
+        );
+      }
+    }
+
+    if (!needsRawScripts) return null;
+
+    return {
+      code: "EXECUTE_DISABLED",
+      message:
+        job.tool === "batch"
+          ? "This batch contains an `execute` call, and raw ExtendScript is disabled in the offhand panel."
+          : "Raw ExtendScript is disabled in the offhand panel.",
+      hint: 'Typed tools cover most tasks. To run raw scripts, enable "Allow raw scripts" in the offhand panel and retry.',
+    };
   }
 
   private enqueueSnapshot(): void {
