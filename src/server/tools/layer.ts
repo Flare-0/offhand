@@ -2,6 +2,11 @@ import { z } from 'zod';
 import { textResult } from './result.js';
 import type { ToolDefinition } from './types.js';
 
+const detailSchema = z
+  .enum(['min', 'full'])
+  .optional()
+  .describe('Response detail: min (ids and essentials, default) or full (every field).');
+
 const selector = z.union([z.number(), z.string()]);
 const colorSchema = z.union([z.string(), z.array(z.number()).min(3).max(4)]);
 
@@ -9,18 +14,19 @@ export const layerTool: ToolDefinition = {
   name: 'layer',
   title: 'Layer',
   description:
-    'List, inspect, create, update, duplicate, reorder, or delete layers in a composition. Deleting requires confirm: true.',
+    'List, inspect, create, update, duplicate, reorder, or delete layers in a composition. Deleting requires confirm: true. Layers are addressed by 1-based index, name, or stable id (#123 from layer list/get); writes return a changed map of {field: {from, to}}.',
   inputSchema: {
     action: z
       .enum(['list', 'get', 'create', 'set', 'duplicate', 'reorder', 'delete'])
       .default('list')
       .describe('Operation to perform.'),
+    detail: detailSchema,
     comp: selector
       .optional()
       .describe('Composition id or name. Defaults to the active composition.'),
     layer: selector
       .optional()
-      .describe('Layer index (1-based) or name. Defaults to the first selected layer.'),
+      .describe('Layer index (1-based), name, or stable id ("#123" or "id:123"). Defaults to the first selected layer.'),
     type: z
       .enum(['text', 'solid', 'null', 'shape', 'camera', 'light', 'comp', 'footage'])
       .optional()

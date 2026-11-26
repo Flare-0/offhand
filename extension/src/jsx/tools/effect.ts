@@ -1,4 +1,4 @@
-﻿import { Offhand } from "../core/state";
+import { Offhand } from "../core/state";
 
 Offhand.tools = Offhand.tools || {};
 
@@ -166,22 +166,24 @@ Offhand.tools = Offhand.tools || {};
           'Call effect with action="search" to find a valid matchName.',
         );
       }
+      var count = parade.numProperties;
       var added = parade.addProperty(matchName);
-      return effectInfo(util, added, added.propertyIndex);
+      var addResult = effectInfo(util, added, added.propertyIndex);
+      addResult.created = { matchName: added.matchName, name: added.name };
+      addResult.changed = { effects: { from: count, to: parade.numProperties } };
+      return addResult;
     }
 
     if (action === "set") {
       var target = findEffect(util, parade, args.effect);
-      var changed = [];
-      if (args.enabled !== undefined) {
-        target.enabled = !!args.enabled;
-        changed.push("enabled");
-      }
+      var changed = {};
+      var enabledBefore = target.enabled;
+      var effProp = null;
+      var valueBefore = null;
       if (args.property !== undefined) {
         if (args.value === undefined) {
           util.fail("INVALID_ARGS", "value is required when setting an effect property.");
         }
-        var effProp = null;
         if (typeof args.property === "number") {
           effProp = target.property(args.property);
         } else {
@@ -190,10 +192,29 @@ Offhand.tools = Offhand.tools || {};
         if (!effProp) {
           util.fail("NOT_FOUND", 'No effect property "' + args.property + '" on "' + target.name + '".');
         }
-        util.setValue(effProp, args.value, args.time);
-        changed.push(effProp.name);
+        try {
+          valueBefore = util.readValue(effProp);
+        } catch (readError) {
+          valueBefore = null;
+        }
       }
-      if (changed.length === 0) {
+      if (args.enabled !== undefined) {
+        target.enabled = !!args.enabled;
+        if (target.enabled !== enabledBefore) {
+          changed.enabled = { from: enabledBefore, to: target.enabled };
+        }
+      }
+      if (effProp) {
+        util.setValue(effProp, args.value, args.time);
+        var valueAfter = null;
+        try {
+          valueAfter = util.readValue(effProp);
+        } catch (readAfterError) {
+          valueAfter = null;
+        }
+        changed[effProp.name] = { from: valueBefore, to: valueAfter };
+      }
+      if (args.enabled === undefined && args.property === undefined) {
         util.fail("INVALID_ARGS", "Nothing to change.", "Pass property + value, or enabled.");
       }
       var res = effectInfo(util, target, target.propertyIndex);
@@ -212,7 +233,7 @@ Offhand.tools = Offhand.tools || {};
       }
       var removedName = doomed.name;
       doomed.remove();
-      return { removed: true, name: removedName, layer: layer.name };
+      return { removed: true, name: removedName, layer: layer.name, layerId: layer.id };
     }
 
     util.fail("INVALID_ARGS", 'Unknown effect action "' + action + '".', "Use list, search, add, set, or remove.");

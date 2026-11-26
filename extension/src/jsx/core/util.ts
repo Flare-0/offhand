@@ -74,6 +74,63 @@ Offhand.util =
       return parsed;
     }
 
+    /** Deep-copies arrays so a snapshot cannot be mutated by the caller. */
+    function clone(value) {
+      if (value instanceof Array) {
+        var copy = [];
+        for (var i = 0; i < value.length; i += 1) copy.push(clone(value[i]));
+        return copy;
+      }
+      return value;
+    }
+
+    function same(a, b) {
+      return Offhand.json.stringify(a) === Offhand.json.stringify(b);
+    }
+
+    /** `{ field: { from, to } }` for the fields that actually moved. */
+    function diff(before, after) {
+      var out = {};
+      for (var key in before) {
+        if (!before.hasOwnProperty(key)) continue;
+        var next = after.hasOwnProperty(key) ? after[key] : null;
+        if (!same(before[key], next)) out[key] = { from: before[key], to: next };
+      }
+      return out;
+    }
+
+    /**
+     * Snapshot the named fields of an object, then call the returned function
+     * after the write to get a diff. Used by every write handler so callers can
+     * see what changed instead of re-reading the object.
+     */
+    function track(target, fields) {
+      var before = {};
+      for (var i = 0; i < fields.length; i += 1) {
+        var value = null;
+        try {
+          value = target[fields[i]];
+        } catch (error) {
+          value = null;
+        }
+        before[fields[i]] = clone(value);
+      }
+      return function () {
+        var after = {};
+        for (var key in before) {
+          if (!before.hasOwnProperty(key)) continue;
+          var now = null;
+          try {
+            now = target[key];
+          } catch (readError) {
+            now = null;
+          }
+          after[key] = clone(now);
+        }
+        return diff(before, after);
+      };
+    }
+
     function page(rows, limit, offset) {
       var start = offset === undefined || offset === null ? 0 : Math.max(0, parseInt(offset, 10) || 0);
       var max = limit === undefined || limit === null ? rows.length : Math.max(1, parseInt(limit, 10) || 1);
@@ -144,8 +201,21 @@ Offhand.util =
       fail("INVALID_ARGS", "comp must be a composition id or name.");
     }
 
+    function findLayerById(comp, id) {
+      for (var i = 1; i <= comp.numLayers; i += 1) {
+        var candidate = comp.layer(i);
+        if (candidate.id === id) return candidate;
+      }
+      fail(
+        "NOT_FOUND",
+        'No layer with id ' + id + ' in "' + comp.name + '".',
+        'Call layer with action="list" to see current layer ids.',
+      );
+    }
+
     function findLayer(comp, selector) {
       if (selector && typeof selector === "object") {
+        if (typeof selector.id === "number") return findLayerById(comp, selector.id);
         if (typeof selector.index === "number") return findLayer(comp, selector.index);
         if (typeof selector.name === "string") return findLayer(comp, selector.name);
       }
@@ -171,6 +241,9 @@ Offhand.util =
       }
 
       if (typeof selector === "string") {
+        var idMatch = /^#(\d+)$/.exec(selector) || /^id:\s*(\d+)$/i.exec(selector);
+        if (idMatch) return findLayerById(comp, parseInt(idMatch[1], 10));
+
         var match = null;
         var lower = selector.toLowerCase();
         for (var i = 1; i <= comp.numLayers; i += 1) {
@@ -322,6 +395,7 @@ Offhand.util =
 
     function layerInfo(layer) {
       var info = {
+        id: layer.id,
         index: layer.index,
         name: layer.name,
         type: layerType(layer),
@@ -356,6 +430,19 @@ Offhand.util =
       }
 
       return info;
+    }
+
+    /** Compact row for `detail="min"` layer listings. */
+    function layerBrief(layer) {
+      return {
+        id: layer.id,
+        index: layer.index,
+        name: layer.name,
+        type: layerType(layer),
+        enabled: layer.enabled,
+        locked: layer.locked,
+        selected: !!layer.selected,
+      };
     }
 
     function childNames(group, max) {
@@ -883,6 +970,9 @@ Offhand.util =
       round: round,
       clampInt: clampInt,
       page: page,
+      clone: clone,
+      diff: diff,
+      track: track,
       project: project,
       comp: findComp,
       layer: findLayer,
@@ -894,6 +984,7 @@ Offhand.util =
       compInfo: compInfo,
       layerType: layerType,
       layerInfo: layerInfo,
+      layerBrief: layerBrief,
       property: propertyPath,
       propertyType: propertyType,
       propertyInfo: propertyInfo,

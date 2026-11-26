@@ -4,13 +4,13 @@
 > fresh agent session can pick up without re-deriving anything. Sanitized: no tokens, no secrets, no
 > machine-specific absolute paths.
 >
-> Last updated: 2026-11-25 (release of `0.1.0`).
+> Last updated: 2026-11-26 (Phase E, `0.2.0` in progress).
 
 ---
 
 ## 1. What this is
 
-**offhand** (`offhand-mcp`) is an MCP server for Adobe After Effects. It exposes 14 typed tools so an
+**offhand** (`offhand-mcp`) is an MCP server for Adobe After Effects. It exposes 15 typed tools so an
 agent can do common AE work without writing ExtendScript, plus one gated `execute` escape hatch.
 
 Pipeline:
@@ -68,6 +68,19 @@ Target: **After Effects 2023+** (`AEFT [23.0,99.9]`). Windows only in practice; 
 - **Installer installs from source** (`codeload.github.com` zip), not npm, because the package is unpublished
   (`npx -y offhand-mcp` → 404).
 - **`0.1.0` is framed honestly as a public preview** with a known-limitations section, not a finished product.
+- **Phase E (0.2.0) makes writes observable and reads cheap** rather than adding breadth: every write
+  returns a `changed` map (`{field:{from,to}}`), creators return `created`, removals `removed`, and no-op
+  writes return a `note` instead of a silent success. Reads default to `detail: "min"` and keep `"full"` as
+  an explicit opt-in.
+- **Layers are addressed by stable id** (`"#42"` / `"id:42"`), because names and indexes drift when a
+  user renames or reorders. `findLayer` still accepts both for convenience.
+- **`batch` exists to cut round trips, not to expand power.** It runs at most 20 handler calls, cannot
+  nest, shares one undo group, and the panel's security gate scans the call list for `execute` — so the
+  raw-script switch cannot be bypassed by packing it into a batch.
+- **Render jobs are honest about the limitation:** `render queue` records a job, `jobs` reports state, but
+  `start` calls the blocking `rq.render()` because ExtendScript cannot render in the background.
+- **The typed surface grows from evidence:** `offhand patterns` groups repeated `execute` reasons from
+  `usage.jsonl` and suggests the tool that should absorb them.
 
 ---
 
@@ -85,12 +98,13 @@ Target: **After Effects 2023+** (`AEFT [23.0,99.9]`). Windows only in practice; 
 | — | Release prep: installer, docs, changelog | `62472a4` |
 | — | `CONTEXT.md` handoff snapshot (this file) | `9ec6de0` |
 | — | Ruleset note + PR flow docs (PRs #9, #10) | `08b42b2`, `ba8168d` |
+| E | Tool surface: stable ids, write diffs, `batch`, `detail`, render jobs, `offhand patterns` | 0.2.0 (this PR) |
 
 Live-verified on **AE 2023 (23.6x62)**: bridge reaches `ready`; `status`, `project` and `comp` work through
 the full MCP → WS → panel queue → host chain. A second agent used the MCP successfully.
 
-Checks at release: `typecheck` ✓ · **24 tests / 5 files** ✓ · `lint` ✓ · extension build ✓ (250.64 kB panel
-bundle; expected `eval` warnings from `core/json.ts` and `tools/execute.ts`).
+Checks at Phase E: `typecheck` ✓ · **29 tests / 6 files** ✓ · `lint` ✓ · `build` ✓ · extension build ✓
+(250.98 kB panel bundle; expected `eval` warnings from `core/json.ts` and `tools/execute.ts`).
 
 ### Release 0.1.0 — shipped
 
@@ -104,12 +118,13 @@ bundle; expected `eval` warnings from `core/json.ts` and `tools/execute.ts`).
 
 ### Known gaps
 
-- Only `status`, `project`, `comp` have individual live smoke tests. The other 11 tools share the same code
-  path but are unverified individually.
-- Layers are addressed by name/index only — no stable layer IDs yet.
-- No write diffs, no `batch` tool, no `detail: min|full`, no render jobs (all Phase E).
-- Phase D bundled host not yet re-verified live after a panel reload (legacy `dist/cep/host` fallback is
-  still present, so a failure would be masked — check the log to confirm which host answered).
+- Only `status`, `project`, `comp` have individual live smoke tests. The other 12 tools share the same code
+  path but are unverified individually. The Phase E additions (ids, diffs, batch, detail, render jobs) have
+  **not** been exercised in a live After Effects session yet.
+- `render start` blocks the panel until AE finishes; there is no progress stream.
+- A `batch` that fails midway leaves earlier calls applied (one undo group, so one Ctrl+Z reverts them).
+- Phase D bundled host still not confirmed live after a panel reload (legacy `dist/cep/host` fallback is
+  present, so a failure would be masked — check the log to confirm which host answered).
 - macOS untested. npm publish is Phase H.
 - Stale remote branch `docs/context-ruleset-note` (merged in #9) still exists; remove it only with the user's
   consent, since that is a delete command.
@@ -120,14 +135,14 @@ bundle; expected `eval` warnings from `core/json.ts` and `tools/execute.ts`).
 
 ## 5. Next moves (in order)
 
-1. **Live-check the Phase D host** — reload the panel (flyout → Reload) or restart AE, then run `status` and
-   a couple of writes through the new bundled host. Confirm from the log that `src/jsx` answered, not the
+1. **Live-check Phase E** — reload the panel (flyout → Reload) or restart AE, then: `layer list` (confirm
+   `id` and `min` shape), `layer set` (confirm `changed` diff), a two-call `batch`, `layer list` with
+   `detail: "full"`, and `render queue`/`jobs`. Confirm from the log that `src/jsx` answered, not the
    legacy fallback.
-2. **Phase E — tool surface:** stable layer IDs, write diffs, `batch`, `detail: min|full`, render jobs, and
-   promoting repeated `execute` patterns into typed tools.
-3. Phase F — testability: expand the fake panel, mock AE object model, a 10–20 task eval set.
-4. Phase G — `offhand install`, `offhand doctor --fix`, audit-log surfacing.
-5. Phase H — npm publish.
+2. Phase F — testability: mock AE object model so host handlers run without After Effects, plus a 10–20
+   task eval set (the fake panel in `tests/bridge.test.ts` already covers the protocol side).
+3. Phase G — `offhand install`, `offhand doctor --fix`, audit-log surfacing.
+4. Phase H — docs + live verification + npm publish.
 
 ---
 
@@ -138,20 +153,23 @@ bundle; expected `eval` warnings from `core/json.ts` and `tools/execute.ts`).
 | `src/cli.ts` | entry point, `doctor` subcommand, `OFFHAND_HOME` override |
 | `src/server/server.ts` | MCP server, tool registry, bridge wiring; never writes stdout |
 | `src/server/bridge.ts` | dial-in WS client, retries with backoff, diagnosis codes |
-| `src/server/tools/*` | one file per tool (zod schema + handler) |
+| `src/server/tools/*` | one file per tool (zod schema + handler), `registry.ts` lists all 15 |
+| `src/server/log.ts` | JSONL usage log + `readExecutePatterns`/`suggestTool` for promotion |
 | `src/shared/protocol.ts` | protocol v2 types (panel keeps a deliberate copy) |
 | `src/shared/paths.ts` | `bridge.json`, token, log paths; atomic writes with Windows retry |
 | `extension/src/js/main/main.tsx` | panel UI (state chip, log, Reconnect, permissions) |
 | `extension/src/js/bridge/server.ts` | panel WS server, serialized host-call queue, settings gate |
 | `extension/src/jsx/host.ts` | dispatcher: parse args, undo group, serialize result |
-| `extension/src/jsx/core/state.ts` | shared ExtendScript namespace (`tools`, `writeTools`, `json`, `util`) |
+| `extension/src/jsx/core/state.ts` | shared ExtendScript namespace (`tools`, `writeTools`, `json`, `util`, `jobs`) |
+| `extension/src/jsx/core/util.ts` | resolution, `diff`/`track`/`layerBrief`, `#id` selectors, paging |
+| `extension/src/jsx/tools/batch.ts` | sequential composition of handlers (max 20, no nesting) |
 | `extension/cep.config.ts` | extension id, `AEFT [23.0,99.9]`, `--enable-nodejs`, `installModules: ["ws"]` |
 | `scripts/setup-windows.ps1` | public one-liner installer |
 | `scripts/install-cep.mjs` | copies `extension/dist/cep` → `%APPDATA%\Adobe\CEP\extensions\com.offhand.panel`, sets `PlayerDebugMode` |
 | `docs/install.md` | requirements, one-liner, MCP configs, troubleshooting table |
 | `docs/architecture.md` | current topology, protocol, failure modes, UXP migration |
-| `CHANGELOG.md` | 0.1.0 preview notes |
-| `ROADMAP.md` | phases A–H; A–D checked |
+| `CHANGELOG.md` | 0.1.0 preview + 0.2.0 (Phase E) notes |
+| `ROADMAP.md` | phases A–H; A–E checked |
 | `AGENT.md` | standing rules, per-phase "done" notes, gotchas |
 
 ---

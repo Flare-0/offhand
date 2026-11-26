@@ -1,4 +1,5 @@
 import { assetsTool } from './assets.js';
+import { batchTool } from './batch.js';
 import { compTool } from './comp.js';
 import { docsTool } from './docs.js';
 import { effectTool } from './effect.js';
@@ -29,4 +30,5 @@ export const TOOLS: ToolDefinition[] = [
   assetsTool,
   viewTool,
   executeTool,
+  batchTool,
 ];

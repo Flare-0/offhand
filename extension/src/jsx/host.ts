@@ -24,6 +24,7 @@ import "./tools/render";
 import "./tools/assets";
 import "./tools/view";
 import "./tools/execute";
+import "./tools/batch";
 
 const errorResult = (
   code: string,

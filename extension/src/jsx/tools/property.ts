@@ -1,8 +1,16 @@
-﻿import { Offhand } from "../core/state";
+import { Offhand } from "../core/state";
 
 Offhand.tools = Offhand.tools || {};
 
 (function () {
+  function readSafe(util, prop) {
+    try {
+      return util.readValue(prop);
+    } catch (error) {
+      return null;
+    }
+  }
+
   function applyEase(util, prop, keyIndex, easeMode) {
     if (!easeMode || easeMode === "linear") {
       if (typeof KeyframeInterpolationType !== "undefined") {
@@ -56,8 +64,19 @@ Offhand.tools = Offhand.tools || {};
     if (action === "list") {
       var group = args.path ? util.property(layer, args.path) : layer;
       var items = util.listProperties(group, args.limit === undefined ? 50 : args.limit);
+      if (args.detail === "full") {
+        for (var i = 0; i < items.length; i += 1) {
+          try {
+            var child = group.property(items[i].index);
+            if (child) items[i].value = readSafe(util, child);
+          } catch (valueError) {
+            // Groups and non-value properties have no single value.
+          }
+        }
+      }
       return {
         layer: layer.name,
+        layerId: layer.id,
         path: args.path || "",
         items: items,
         total: group.numProperties || 0,
@@ -75,8 +94,9 @@ Offhand.tools = Offhand.tools || {};
     var prop = util.property(layer, args.path);
 
     if (action === "get") {
-      var info = util.propertyInfo(prop, args.includeKeys !== false);
+      var info = util.propertyInfo(prop, args.detail === "min" ? false : args.includeKeys !== false);
       info.layer = layer.name;
+      info.layerId = layer.id;
       info.path = args.path;
       return info;
     }
@@ -85,6 +105,8 @@ Offhand.tools = Offhand.tools || {};
       if (args.value === undefined) {
         util.fail("INVALID_ARGS", "value is required for action=\"set\".");
       }
+      var valueBefore = readSafe(util, prop);
+      var keysBefore = prop.numKeys || 0;
       if (prop.numKeys && prop.numKeys > 0 && args.time === undefined) {
         util.setValue(prop, args.value, comp.time);
       } else {
@@ -92,7 +114,12 @@ Offhand.tools = Offhand.tools || {};
       }
       var setResult = util.propertyInfo(prop, false);
       setResult.layer = layer.name;
+      setResult.layerId = layer.id;
       setResult.path = args.path;
+      setResult.changed = { value: { from: valueBefore, to: readSafe(util, prop) } };
+      if ((prop.numKeys || 0) !== keysBefore) {
+        setResult.changed.keyframes = { from: keysBefore, to: prop.numKeys || 0 };
+      }
       return setResult;
     }
 
@@ -101,6 +128,8 @@ Offhand.tools = Offhand.tools || {};
         util.fail("INVALID_ARGS", "value is required for action=\"keyframe\".");
       }
       var atTime = util.time(args, comp);
+      var keyValueBefore = readSafe(util, prop);
+      var keyCountBefore = prop.numKeys || 0;
       util.setValue(prop, args.value, atTime);
       var keyIndex = prop.nearestKeyIndex(atTime);
       if (args.ease) {
@@ -108,13 +137,20 @@ Offhand.tools = Offhand.tools || {};
       }
       var keyResult = util.propertyInfo(prop, true);
       keyResult.layer = layer.name;
+      keyResult.layerId = layer.id;
       keyResult.path = args.path;
       keyResult.keyIndex = keyIndex;
+      keyResult.changed = { value: { from: keyValueBefore, to: readSafe(util, prop) } };
+      if ((prop.numKeys || 0) !== keyCountBefore) {
+        keyResult.changed.keyframes = { from: keyCountBefore, to: prop.numKeys || 0 };
+      }
       return keyResult;
     }
 
     if (action === "removeKeyframe") {
       var index = args.keyIndex;
+      var keyCountBefore = prop.numKeys || 0;
+      var keyValueBefore = readSafe(util, prop);
       if (index === undefined && args.time !== undefined && prop.numKeys > 0) {
         index = prop.nearestKeyIndex(util.number(args.time, "time"));
       }
@@ -128,7 +164,12 @@ Offhand.tools = Offhand.tools || {};
       prop.removeKey(index);
       var remResult = util.propertyInfo(prop, true);
       remResult.layer = layer.name;
+      remResult.layerId = layer.id;
       remResult.path = args.path;
+      remResult.changed = {
+        keyframes: { from: keyCountBefore, to: prop.numKeys || 0 },
+        value: { from: keyValueBefore, to: readSafe(util, prop) },
+      };
       return remResult;
     }
 
@@ -139,6 +180,8 @@ Offhand.tools = Offhand.tools || {};
           'Property "' + prop.name + '" does not support expressions.',
         );
       }
+      var expressionBefore = prop.expression || "";
+      var enabledBefore = !!prop.expressionEnabled;
       if (args.expression !== undefined) {
         prop.expression = String(args.expression);
       }
@@ -149,7 +192,12 @@ Offhand.tools = Offhand.tools || {};
       }
       var exprResult = util.propertyInfo(prop, false);
       exprResult.layer = layer.name;
+      exprResult.layerId = layer.id;
       exprResult.path = args.path;
+      exprResult.changed = {
+        expression: { from: expressionBefore, to: prop.expression || "" },
+        expressionEnabled: { from: enabledBefore, to: !!prop.expressionEnabled },
+      };
       return exprResult;
     }
 

@@ -2,6 +2,11 @@ import { z } from 'zod';
 import { textResult } from './result.js';
 import type { ToolDefinition } from './types.js';
 
+const detailSchema = z
+  .enum(['min', 'full'])
+  .optional()
+  .describe('Response detail: min (ids and essentials, default) or full (every field).');
+
 const selector = z.union([z.number(), z.string()]);
 const colorSchema = z.union([z.string(), z.array(z.number()).min(3).max(4)]);
 
@@ -9,12 +14,13 @@ export const compTool: ToolDefinition = {
   name: 'comp',
   title: 'Composition',
   description:
-    'List compositions, inspect a composition, create a new composition, or update composition settings (dimensions, fps, duration, work area, background color).',
+    'List compositions, inspect a composition, create a new composition, or update composition settings (dimensions, fps, duration, work area, background color). Compositions are addressed by id or name; writes return a changed map of {field: {from, to}}.',
   inputSchema: {
     action: z
       .enum(['list', 'get', 'create', 'set'])
       .default('list')
       .describe('Operation to perform.'),
+    detail: detailSchema,
     comp: selector
       .optional()
       .describe('Composition id or name. Defaults to the active composition.'),
