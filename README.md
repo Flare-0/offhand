@@ -67,10 +67,12 @@ reinstalling. See [docs/install.md](docs/install.md) for the full walkthrough an
 
 ## Status
 
-`0.3.0` - a working end-to-end preview. **Phases A-E of the rewrite are complete and verified live on
-AE 2023**: the panel hosts the bridge inside After Effects, the MCP server dials in, and the ExtendScript
+`1.0.0` - stable. **Phases A-E of the rewrite are complete and verified live on AE 2023**: the panel
+hosts the bridge inside After Effects, the MCP server dials in, and the ExtendScript
 host is compiled from TypeScript to ES3. The full 15-tool surface has been exercised through the real
-MCP → WebSocket → panel → host chain.
+MCP → WebSocket → panel → host chain. The panel is a compact bridge console: all setup lives in a
+**Debug** section, with a **Status** panel and a scrolling **Log** below it. Copy MCP config writes a
+local `node .../dist/cli.js` command for the connected server.
 
 All 15 tools are implemented on both sides: `status`, `docs`, `project`, `comp`, `layer`, `property`,
 `effect`, `text`, `shape`, `mask`, `render`, `assets`, `view`, `batch`, and the `execute` escape hatch.

@@ -4,7 +4,7 @@
 > fresh agent session can pick up without re-deriving anything. Sanitized: no tokens, no secrets, no
 > machine-specific absolute paths.
 >
-> Last updated: 2026-11-28 (`0.3.0` released; Phase E live-verified, uids + scheduled renders).
+> Last updated: 2026-11-28 (`1.0.0` released; panel redesigned, Phase E live-verified).
 
 ---
 
@@ -103,6 +103,7 @@ Target: **After Effects 2023+** (`AEFT [23.0,99.9]`). Windows only in practice; 
 | — | Ruleset note + PR flow docs (PRs #9, #10) | `08b42b2`, `ba8168d` |
 | E | Tool surface: stable ids, write diffs, `batch`, `detail`, render jobs, `offhand patterns` | 0.2.0 release |
 | — | Hardening: layer uids, reorder by neighbor, scheduled renders, reload-safe job history | 0.3.0 release |
+| — | Panel UI: Debug / Status / Log, local `node` MCP config via hello `clientPath` | 1.0.0 release |
 
 Live-verified on **AE 2023 (23.6x62)**: bridge reaches `ready`; the full 15-tool surface has been
 exercised through the real MCP → WS → panel queue → host chain (110-check sweep). The fixes that sweep
@@ -112,9 +113,17 @@ crashes and justification, read-only text attributes, shape fill target and `com
 was verified end to end (valid 32 KB MP4, PNG frame).
 
 Checks: `typecheck` ✓ · **100 tests / 11 files** ✓ · `lint` ✓ · `build` ✓ · extension build ✓
-(250.98 kB panel bundle; expected `eval` warnings from `core/json.ts` and `tools/execute.ts`). The
+(251.78 kB panel bundle; expected `eval` warnings from `core/json.ts` and `tools/execute.ts`). The
 suite includes a mock AE object model (`tests/support/ae-mock.ts`), so every typed tool runs end to end
 without After Effects.
+
+### Release 1.0.0 — shipped
+
+- Tag `v1.0.0` and GitHub Release with `offhand-panel-1.0.0.zip`.
+- Panel is header + collapsible **Debug** + **Status** + **Log**, using the same dark palette; section
+  labels are sentence case in the UI font.
+- The MCP hello reports `clientPath`; Copy MCP config emits `node <path>/dist/cli.js` (the old npx
+  command was unpublished). `AeSnapshot.selection.layers` now matches the uid shape.
 
 ### Release 0.3.0 — shipped
 

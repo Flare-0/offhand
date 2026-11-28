@@ -275,6 +275,7 @@ export class Bridge extends EventEmitter {
           protocol: PROTOCOL_VERSION,
           token: config.token,
           clientVersion: VERSION,
+          clientPath: process.argv[1] ?? '',
         };
         socket.send(JSON.stringify(hello));
 

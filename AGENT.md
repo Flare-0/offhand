@@ -195,7 +195,7 @@ its flyout menu (or restart AE) before trusting the ported handlers in AE.
 
 ---
 
-### ✅ Phase E + 0.3.0 hardening done (2026-11-28) — tool surface and stable uids released
+### ✅ Phase E + 0.3.0 hardening + 1.0.0 panel done (2026-11-28)
 
 The tools now behave like an agent surface rather than API wrappers. All of this is on **both** sides
 (host handler + server schema) and covered by tests.
@@ -227,11 +227,16 @@ The tools now behave like an agent surface rather than API wrappers. All of this
   `extension/src/jsx/tools/` (the `.jsx` fallback is no longer the contract); new
   `tests/patterns.test.ts`, `tests/host-eval.test.ts`, `tests/host-property.test.ts`,
   `tests/host-assets.test.ts`, `tests/support/ae-mock.ts` and `tests/versions.test.ts`.
-  **11 files / 100 tests.** Versions are 0.3.0 in root, extension, `src/shared/version.ts` and
+  **11 files / 100 tests.** Versions are 1.0.0 in root, extension, `src/shared/version.ts` and
   `core/state.ts`.
 
+- **Panel UI (1.0.0).** Header plus three regions: a collapsible **Debug** section (endpoint, clients,
+  panel version, server path, raw-scripts toggle, reconnect, copy config, bridge path), a **Status**
+  panel, and a scrolling **Log**. The hello message carries `clientPath`, so Copy MCP config emits
+  `node <server>/dist/cli.js` instead of the unpublished `npx offhand-mcp`.
+
 **Checks:** `typecheck`, `test` (11/100), `lint`, `build` (76.5 KB cli), `build:extension`
-(251 KB panel) all green; `eval` warnings from `core/json.ts` / `tools/execute.ts` are expected.
+(252 KB panel) all green; `eval` warnings from `core/json.ts` / `tools/execute.ts` are expected.
 
 **Live AE pass complete (2026-11-28, AE 23.6x62).** Every one of the 15 tools was exercised through the
 real MCP → WebSocket → panel queue → host chain. The sweep found and fixed, in the same release:

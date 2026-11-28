@@ -37,7 +37,7 @@ Options:
 
 ```powershell
 # install somewhere else, from a specific tag
-.\scripts\setup-windows.ps1 -Dir D:\tools\offhand -Ref v0.3.0
+.\scripts\setup-windows.ps1 -Dir D:\tools\offhand -Ref v1.0.0
 
 # reuse an existing build (faster, e.g. after editing docs)
 .\scripts\setup-windows.ps1 -SkipBuild
@@ -98,7 +98,7 @@ node "$env:LOCALAPPDATA\offhand\app\dist\cli.js" doctor
 
 ```
 offhand doctor
-  server      0.3.0 (protocol 2)
+  server      1.0.0 (protocol 2)
   bridge.json ok  (C:\Users\you\AppData\Roaming\offhand\bridge.json)
   token       present
   panel       not connected (PANEL_NOT_RUNNING) — open Window > Extensions > offhand

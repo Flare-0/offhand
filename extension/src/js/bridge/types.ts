@@ -27,7 +27,7 @@ export type AeSnapshot = {
   } | null;
   selection?: {
     items: { id: number; name: string; type: string }[];
-    layers: { index: number; name: string }[];
+    layers: { uid: string; name: string }[];
   };
 };
 
@@ -72,6 +72,7 @@ export type HelloMessage = {
   protocol: number;
   token: string;
   clientVersion?: string;
+  clientPath?: string;
 };
 
 /** Panel -> MCP server, sent once the hello is accepted. */

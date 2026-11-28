@@ -4,20 +4,6 @@ import type { PanelLog, PanelStatus } from "../bridge/server";
 import { PANEL_VERSION } from "../bridge/config";
 import "./main.scss";
 
-const MCP_CONFIG = JSON.stringify(
-  {
-    mcp: {
-      offhand: {
-        type: "local",
-        command: ["npx", "-y", "offhand-mcp"],
-        enabled: true,
-      },
-    },
-  },
-  null,
-  2,
-);
-
 const STATE_LABEL: Record<PanelStatus["state"], string> = {
   idle: "idle",
   listening: "listening",
@@ -27,18 +13,15 @@ const STATE_LABEL: Record<PanelStatus["state"], string> = {
 
 const STATE_HINT: Record<PanelStatus["state"], string> = {
   idle: "Starting the bridge…",
-  listening:
-    "Waiting for an MCP client. Add offhand to your MCP config, then start a chat.",
+  listening: "Waiting for an MCP client…",
   ready: "An MCP client is connected. Tools are available.",
-  degraded: "The bridge could not start. Fix the error above, then press Reconnect.",
+  degraded: "The bridge hit an error. Open Debug for details.",
 };
 
 const copyText = async (text: string): Promise<void> => {
-  try {
+  if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
     return;
-  } catch {
-    // CEP's Chromium blocks the async clipboard on file:// pages.
   }
   const area = document.createElement("textarea");
   area.value = text;
@@ -47,62 +30,78 @@ const copyText = async (text: string): Promise<void> => {
   document.body.appendChild(area);
   area.select();
   document.execCommand("copy");
-  document.body.removeChild(area);
+  area.remove();
 };
 
 const clock = (at: number): string =>
-  new Date(at).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  new Date(at).toLocaleTimeString([], { hour12: false });
 
-const Toggle = ({
-  checked,
-  onChange,
-  label,
-}: {
+function Toggle(props: {
   checked: boolean;
   onChange: (next: boolean) => void;
   label: string;
-}) => (
-  <button
-    type="button"
-    role="switch"
-    aria-checked={checked}
-    aria-label={label}
-    className={`oh-toggle${checked ? " oh-toggle--on" : ""}`}
-    onClick={() => onChange(!checked)}
-  >
-    <span className="oh-toggle-knob" />
-  </button>
-);
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={props.checked}
+      aria-label={props.label}
+      className={`oh-toggle${props.checked ? " oh-toggle--on" : ""}`}
+      onClick={() => props.onChange(!props.checked)}
+    >
+      <span className="oh-toggle-knob" />
+    </button>
+  );
+}
 
-export const App = () => {
+export function App() {
   const [status, setStatus] = useState<PanelStatus>(() => bridge.status());
   const [logs, setLogs] = useState<PanelLog[]>([]);
   const [reconnecting, setReconnecting] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const unsubscribeStatus = bridge.subscribe(setStatus);
-    const unsubscribeLog = bridge.onLog(setLogs);
-    // Idempotent: StrictMode mounts twice and Reconnect can race this.
+    const offStatus = bridge.subscribe(setStatus);
+    const offLog = bridge.onLog(setLogs);
     void bridge.start();
     return () => {
-      unsubscribeStatus();
-      unsubscribeLog();
+      offStatus();
+      offLog();
     };
   }, []);
 
   useEffect(() => {
     if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 1600);
-    return () => clearTimeout(timer);
+    const timer = window.setTimeout(() => setCopied(false), 1600);
+    return () => window.clearTimeout(timer);
   }, [copied]);
 
-  const configPath = useMemo(() => bridge.configPath(), []);
+  const state = status.state;
   const ae = status.ae;
+  const project = ae?.project ?? null;
+  const comp = ae?.comp ?? null;
+  const configPath = bridge.configPath();
+  const endpoint = status.port ? `ws://${status.host}:${status.port}` : "not listening";
+
+  const mcpConfig = useMemo(() => {
+    const command = status.serverPath
+      ? ["node", status.serverPath]
+      : ["node", "<absolute path to offhand>/dist/cli.js"];
+    return JSON.stringify(
+      {
+        mcp: {
+          offhand: {
+            type: "local",
+            command,
+            enabled: true,
+          },
+        },
+      },
+      null,
+      2,
+    );
+  }, [status.serverPath]);
 
   const reconnect = async () => {
     setReconnecting(true);
@@ -120,135 +119,147 @@ export const App = () => {
           <div className="oh-title">offhand</div>
           <div className="oh-sub">After Effects bridge</div>
         </div>
-        <span className={`oh-chip oh-chip--${status.state}`}>
-          {STATE_LABEL[status.state]}
-        </span>
+        <span className={`oh-chip oh-chip--${state}`}>{STATE_LABEL[state]}</span>
       </header>
 
-      <section className="oh-card">
-        <div className="oh-row">
-          <span>Endpoint</span>
-          <code>
-            {status.port ? `ws://${status.host}:${status.port}` : "not listening"}
-          </code>
-        </div>
-        <div className="oh-row">
-          <span>Clients</span>
-          <span>{status.clients}</span>
-        </div>
-        <div className="oh-row">
-          <span>Panel</span>
-          <span>v{status.panelVersion || PANEL_VERSION}</span>
-        </div>
-        <p className="oh-hint">{STATE_HINT[status.state]}</p>
-        {status.lastError && <p className="oh-error">{status.lastError}</p>}
-      </section>
+      <details className="oh-debug">
+        <summary className="oh-debug-summary">
+          <span className="oh-debug-title">Debug</span>
+          <span className="oh-debug-caret" aria-hidden="true">
+            ›
+          </span>
+        </summary>
 
-      <section className="oh-card">
-        <div className="oh-card-title">After Effects</div>
-        {ae ? (
-          <>
+        <div className="oh-debug-body">
+          <div className="oh-debug-section">
             <div className="oh-row">
-              <span>Project</span>
-              <span className="oh-value" title={ae.project?.path ?? undefined}>
-                {ae.project ? ae.project.name : "no project"}
-                {ae.project?.dirty ? " *" : ""}
-              </span>
+              <span>Endpoint</span>
+              <code>{endpoint}</code>
             </div>
             <div className="oh-row">
-              <span>Comp</span>
-              <span className="oh-value">
-                {ae.comp ? ae.comp.name : "none open"}
-              </span>
+              <span>MCP clients</span>
+              <span>{status.clients > 0 ? `${status.clients} connected` : "none"}</span>
             </div>
-            {ae.comp ? (
-              <>
-                <div className="oh-row">
-                  <span>Size</span>
-                  <span>
-                    {ae.comp.width}×{ae.comp.height} · {ae.comp.fps.toFixed(2)} fps
-                  </span>
-                </div>
-                <div className="oh-row">
-                  <span>Layers</span>
-                  <span>{ae.comp.layers}</span>
-                </div>
-                <div className="oh-row">
-                  <span>Time</span>
-                  <span>
-                    {ae.comp.time.toFixed(2)}s / {ae.comp.duration.toFixed(2)}s
-                  </span>
-                </div>
-              </>
+            <div className="oh-row">
+              <span>Panel</span>
+              <span>v{status.panelVersion || PANEL_VERSION}</span>
+            </div>
+            <div className="oh-row">
+              <span>Server</span>
+              <code title={status.serverPath ?? undefined}>
+                {status.serverPath ?? "waiting for an MCP client"}
+              </code>
+            </div>
+            <div className="oh-row oh-row--toggle">
+              <span>Allow raw scripts</span>
+              <Toggle
+                checked={status.settings.allowRawScripts}
+                onChange={(next) => bridge.setAllowRawScripts(next)}
+                label="Allow raw scripts"
+              />
+            </div>
+            {status.settings.allowRawScripts ? (
+              <div className="oh-warn">
+                Raw `execute` scripts are enabled. Only keep this on while you trust every
+                connected agent.
+              </div>
             ) : (
-              <p className="oh-muted oh-muted--tight">
-                Open a composition in After Effects to see it here.
-              </p>
+              <div className="oh-muted oh-muted--tight">
+                `execute` and batch calls containing it are rejected while this is off.
+              </div>
             )}
-          </>
-        ) : (
-          <p className="oh-muted">Waiting for a snapshot from After Effects…</p>
-        )}
-      </section>
+          </div>
+
+          <div className="oh-debug-section">
+            <div className="oh-actions">
+              <button type="button" disabled={reconnecting} onClick={() => void reconnect()}>
+                {reconnecting ? "Reconnecting…" : "Reconnect"}
+              </button>
+              <button
+                type="button"
+                disabled={!status.serverPath}
+                title={
+                  status.serverPath
+                    ? "Copy a working local MCP config."
+                    : "Connect an MCP client once so the panel learns the server path."
+                }
+                onClick={() => {
+                  void copyText(mcpConfig).then(() => setCopied(true));
+                }}
+              >
+                {copied ? "Copied" : "Copy MCP config"}
+              </button>
+            </div>
+            <div className="oh-path" title={configPath}>
+              {configPath}
+            </div>
+          </div>
+        </div>
+      </details>
 
       <section className="oh-card">
-        <div className="oh-card-title">Permissions</div>
-        <div className="oh-row oh-row--toggle">
-          <div>
-            <span>Allow raw scripts</span>
-            <p className="oh-muted oh-muted--tight">
-              Lets the agent run arbitrary ExtendScript through the{" "}
-              <code>execute</code> tool. Off by default; typed tools keep working
-              either way.
-            </p>
-          </div>
-          <Toggle
-            label="Allow raw scripts"
-            checked={status.settings.allowRawScripts}
-            onChange={(next) => bridge.setAllowRawScripts(next)}
-          />
+        <div className="oh-card-title">Status</div>
+        <div className="oh-status-line">
+          <span className="oh-status-hint">{STATE_HINT[state]}</span>
         </div>
-        {status.settings.allowRawScripts && (
-          <p className="oh-warn">
-            Raw scripts are enabled. Any connected agent can run code in After
-            Effects.
-          </p>
-        )}
+        {status.lastError ? <div className="oh-error">{status.lastError}</div> : null}
+
+        <div className="oh-status-grid">
+          <div className="oh-row">
+            <span>MCP client</span>
+            <span>{status.clients > 0 ? `${status.clients} connected` : "none"}</span>
+          </div>
+          <div className="oh-row">
+            <span>After Effects</span>
+            <span>{ae ? ae.version : "waiting for a snapshot…"}</span>
+          </div>
+          <div className="oh-row">
+            <span>Project</span>
+            <span title={project?.path ?? undefined}>
+              {project ? `${project.name}${project.dirty ? " *" : ""}` : "no project"}
+            </span>
+          </div>
+          <div className="oh-row">
+            <span>Comp</span>
+            <span>{comp ? comp.name : "none open"}</span>
+          </div>
+          <div className="oh-row">
+            <span>Size</span>
+            <span>{comp ? `${comp.width}×${comp.height} · ${comp.fps.toFixed(2)} fps` : "—"}</span>
+          </div>
+          <div className="oh-row">
+            <span>Layers</span>
+            <span>{comp ? comp.layers : "—"}</span>
+          </div>
+          <div className="oh-row">
+            <span>Time</span>
+            <span>
+              {comp ? `${comp.time.toFixed(2)} / ${comp.duration.toFixed(2)} s` : "—"}
+            </span>
+          </div>
+        </div>
       </section>
 
       <section className="oh-card oh-card--grow">
-        <div className="oh-card-title">Activity</div>
+        <div className="oh-card-title">Log</div>
         <div className="oh-log">
-          {logs.length === 0 && (
-            <p className="oh-muted">Nothing yet. Start the bridge to see events.</p>
+          {logs.length === 0 ? (
+            <div className="oh-muted">No events yet.</div>
+          ) : (
+            logs
+              .slice(-40)
+              .reverse()
+              .map((entry) => (
+                <div key={entry.id} className={`oh-log-line oh-log-line--${entry.level}`}>
+                  <span className="oh-log-time">{clock(entry.at)}</span>
+                  <span>{entry.message}</span>
+                </div>
+              ))
           )}
-          {logs
-            .slice(-40)
-            .reverse()
-            .map((entry) => (
-              <div
-                key={entry.id}
-                className={`oh-log-line oh-log-line--${entry.level}`}
-              >
-                <span className="oh-log-time">{clock(entry.at)}</span>
-                <span>{entry.message}</span>
-              </div>
-            ))}
         </div>
       </section>
-
-      <footer className="oh-actions">
-        <button onClick={reconnect} disabled={reconnecting}>
-          {reconnecting ? "Reconnecting…" : "Reconnect"}
-        </button>
-        <button onClick={() => copyText(MCP_CONFIG).then(() => setCopied(true))}>
-          {copied ? "Copied" : "Copy MCP config"}
-        </button>
-      </footer>
-
-      <p className="oh-path" title={configPath}>
-        {configPath || "bridge.json path unavailable"}
-      </p>
     </div>
   );
-};
+}
+
+export default App;

@@ -3,6 +3,29 @@
 All notable changes to offhand. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions use [Semantic Versioning](https://semver.org/).
 
+## [1.0.0] — 2026-11-28
+
+The panel is now a focused bridge console, and its copied MCP config points at the real local server.
+
+### Added
+
+- **Redesigned panel.** Setup and diagnostics live in a collapsible **Debug** section; the main screen is
+  a **Status** panel (connection, MCP client, After Effects, project, comp, size, layers, time) with a
+  scrolling **Log** panel below it.
+- **Working Copy MCP config.** The MCP server reports its entry-point path in the bridge hello, and the
+  panel builds a `node <path>/dist/cli.js` config instead of the unpublished `npx offhand-mcp` command.
+- The panel exposes the connected server path and bridge file path.
+
+### Changed
+
+- Section labels use the normal UI font in sentence case; the previous uppercase, letter-spaced
+  monospace look is gone.
+- `AeSnapshot.selection.layers` now matches the 0.3.0 host shape (`uid` + `name`).
+
+### Tests
+
+- 11 files / 100 tests; typecheck, lint, CLI build, and extension build pass.
+
 ## [0.3.0] — 2026-11-28
 
 Layers are identified by a stable uid, and renders no longer hold the bridge call open.

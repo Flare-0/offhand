@@ -2,6 +2,11 @@
 
 A clear breakdown of what is built, what is verified, and what still needs to be built or tested.
 
+> **1.0.0** released 2026-11-28 — GitHub Release
+> [`v1.0.0`](https://github.com/Flare-0/offhand/releases/tag/v1.0.0) with the built panel attached:
+> the redesigned panel (Debug / Status / Log), local `node` MCP config, and the 0.3.0 layer uids and
+> reload-safe scheduled renders.
+>
 > **0.3.0** (hardening) released 2026-11-28 — GitHub Release
 > [`v0.3.0`](https://github.com/Flare-0/offhand/releases/tag/v0.3.0) with the built panel attached:
 > stable layer uids, reorder by neighbor, scheduled renders with fast polling, and reload-safe job history.
@@ -193,8 +198,9 @@ bridge architecture is being **flipped**. Everything in "Rewrite plan" below is 
 > read-back verification, 2D/3D vector reads, text justification/read-only attributes, shape and
 > render-job diffs; tests grew to 10 files / 84 tests with a mock AE host. **0.3.0 followed on
 > 2026-11-28** with layer uids, reorder by neighbor, scheduled renders with cached polling, and
-> reload-safe job history; tests are now 11 files / 100 tests. Next up is Phase F (the eval task set;
-> the fake panel and mock AE model are already in place).
+> reload-safe job history. **1.0.0 followed on 2026-11-28** with the Debug/Status/Log panel and a local
+> `node` MCP config; tests are 11 files / 100 tests. Next up is Phase F (the eval task set; the fake
+> panel and mock AE model are already in place).
 > Note: `offhand-mcp` is **not on npm** (`npm view` → 404), so MCP clients must launch
 > `node D:/Projects/offhand/dist/cli.js`. Restarting the client after a rebuild is required - an MCP
 > server keeps running the code it was started with.

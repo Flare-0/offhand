@@ -84,7 +84,7 @@ The panel publishes `%APPDATA%\offhand\bridge.json`:
   "port": 47823,
   "token": "…48 hex…",
   "pid": 12345,
-  "panelVersion": "0.3.0",
+  "panelVersion": "1.0.0",
   "startedAt": 1795619716990
 }
 ```

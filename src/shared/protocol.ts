@@ -51,6 +51,8 @@ export interface HelloMessage {
   protocol: number;
   token: string;
   clientVersion: string;
+  /** Absolute path to the running MCP entry point, so the panel can copy a working config. */
+  clientPath?: string;
 }
 
 /** Panel-owned preferences, observable by the server but not writable by it. */

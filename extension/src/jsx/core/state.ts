@@ -42,7 +42,7 @@ export type OffhandState = {
 };
 
 export const Offhand: OffhandState = {
-  version: "0.3.0",
+  version: "1.0.0",
   tools: {},
   writeTools: {
     comp: true,

@@ -75,6 +75,8 @@ export type PanelStatus = {
   port: number | null;
   clients: number;
   panelVersion: string;
+  /** Absolute path reported by the connected MCP server, if any. */
+  serverPath: string | null;
   startedAt: number | null;
   lastError: string | null;
   ae: AeSnapshot | null;
@@ -145,6 +147,7 @@ class PanelBridge {
   private state: PanelState = "idle";
   private lastError: string | null = null;
   private ae: AeSnapshot | null = null;
+  private serverPath: string | null = null;
   private settings: PanelSettings = { allowRawScripts: false };
   private sessions = new Set<Session>();
   private queue: Job[] = [];
@@ -198,6 +201,7 @@ class PanelBridge {
       port: this.port,
       clients: [...this.sessions].filter((session) => session.authed).length,
       panelVersion: PANEL_VERSION,
+      serverPath: this.serverPath,
       startedAt: this.startedAt,
       lastError: this.lastError,
       ae: this.ae,
@@ -473,6 +477,8 @@ class PanelBridge {
 
     session.authed = true;
     session.lastSeen = Date.now();
+    this.serverPath =
+      typeof message.clientPath === "string" && message.clientPath ? message.clientPath : null;
     this.send(session, {
       type: "welcome",
       protocol: PANEL_PROTOCOL_VERSION,
