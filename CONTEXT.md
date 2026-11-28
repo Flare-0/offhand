@@ -4,7 +4,7 @@
 > fresh agent session can pick up without re-deriving anything. Sanitized: no tokens, no secrets, no
 > machine-specific absolute paths.
 >
-> Last updated: 2026-11-26 (Phase E, `0.2.0` in progress).
+> Last updated: 2026-11-28 (`0.2.0` released; Phase E live-verified).
 
 ---
 
@@ -98,13 +98,25 @@ Target: **After Effects 2023+** (`AEFT [23.0,99.9]`). Windows only in practice; 
 | — | Release prep: installer, docs, changelog | `62472a4` |
 | — | `CONTEXT.md` handoff snapshot (this file) | `9ec6de0` |
 | — | Ruleset note + PR flow docs (PRs #9, #10) | `08b42b2`, `ba8168d` |
-| E | Tool surface: stable ids, write diffs, `batch`, `detail`, render jobs, `offhand patterns` | 0.2.0 (this PR) |
+| E | Tool surface: stable ids, write diffs, `batch`, `detail`, render jobs, `offhand patterns` | 0.2.0 release |
 
-Live-verified on **AE 2023 (23.6x62)**: bridge reaches `ready`; `status`, `project` and `comp` work through
-the full MCP → WS → panel queue → host chain. A second agent used the MCP successfully.
+Live-verified on **AE 2023 (23.6x62)**: bridge reaches `ready`; the full 15-tool surface has been
+exercised through the real MCP → WS → panel queue → host chain (110-check sweep). The fixes that sweep
+produced shipped in 0.2.0: runtime `RQItemStatus` labels, MP4/H.264 queue defaults, `assets import`
+`path`/`paths` handling, `property set` read-back verification, 2D/3D vector reads, text fill/stroke
+crashes and justification, read-only text attributes, shape fill target and `comp get` brevity. Render
+was verified end to end (valid 32 KB MP4, PNG frame).
 
-Checks at Phase E: `typecheck` ✓ · **29 tests / 6 files** ✓ · `lint` ✓ · `build` ✓ · extension build ✓
-(250.98 kB panel bundle; expected `eval` warnings from `core/json.ts` and `tools/execute.ts`).
+Checks: `typecheck` ✓ · **84 tests / 10 files** ✓ · `lint` ✓ · `build` ✓ · extension build ✓
+(250.98 kB panel bundle; expected `eval` warnings from `core/json.ts` and `tools/execute.ts`). The
+suite includes a mock AE object model (`tests/support/ae-mock.ts`), so every typed tool runs end to end
+without After Effects.
+
+### Release 0.2.0 — shipped
+
+- Tag `v0.2.0` and GitHub Release with `offhand-panel-0.2.0.zip`.
+- Phase E surface plus the live-sweep fixes listed above.
+- 0.1.0 remains the first public preview.
 
 ### Release 0.1.0 — shipped
 
@@ -118,13 +130,11 @@ Checks at Phase E: `typecheck` ✓ · **29 tests / 6 files** ✓ · `lint` ✓ �
 
 ### Known gaps
 
-- Only `status`, `project`, `comp` have individual live smoke tests. The other 12 tools share the same code
-  path but are unverified individually. The Phase E additions (ids, diffs, batch, detail, render jobs) have
-  **not** been exercised in a live After Effects session yet.
 - `render start` blocks the panel until AE finishes; there is no progress stream.
 - A `batch` that fails midway leaves earlier calls applied (one undo group, so one Ctrl+Z reverts them).
-- Phase D bundled host still not confirmed live after a panel reload (legacy `dist/cep/host` fallback is
-  present, so a failure would be masked — check the log to confirm which host answered).
+- `render start` is the only way to render; there is no cancel action.
+- The legacy `extension/host` tree and its `dist/cep/host` copy remain as a fallback; the bundled
+  `src/jsx` host answers first, but the fallback should be removed once it has been unused for a while.
 - macOS untested. npm publish is Phase H.
 - Stale remote branch `docs/context-ruleset-note` (merged in #9) still exists; remove it only with the user's
   consent, since that is a delete command.
@@ -135,14 +145,10 @@ Checks at Phase E: `typecheck` ✓ · **29 tests / 6 files** ✓ · `lint` ✓ �
 
 ## 5. Next moves (in order)
 
-1. **Live-check Phase E** — reload the panel (flyout → Reload) or restart AE, then: `layer list` (confirm
-   `id` and `min` shape), `layer set` (confirm `changed` diff), a two-call `batch`, `layer list` with
-   `detail: "full"`, and `render queue`/`jobs`. Confirm from the log that `src/jsx` answered, not the
-   legacy fallback.
-2. Phase F — testability: mock AE object model so host handlers run without After Effects, plus a 10–20
-   task eval set (the fake panel in `tests/bridge.test.ts` already covers the protocol side).
-3. Phase G — `offhand install`, `offhand doctor --fix`, audit-log surfacing.
-4. Phase H — docs + live verification + npm publish.
+1. **Phase F — testability** — the fake panel and mock AE host are done; add the 10–20 task eval set and
+   use it to measure success rate, tool calls, tokens and `execute` usage.
+2. Phase G — `offhand install`, `offhand doctor --fix`, audit-log surfacing.
+3. Phase H — docs + npm publish.
 
 ---
 
@@ -183,6 +189,13 @@ Checks at Phase E: `typecheck` ✓ · **29 tests / 6 files** ✓ · `lint` ✓ �
   breaks `--link` with `EINVAL readlink`. Use the copy install there.
 - `PlayerDebugMode = 1` is needed under `HKCU\Software\Adobe\CSXS.9` … `CSXS.13`; the installer writes all
   five. Without it, an unsigned panel does not appear in **Window → Extensions**.
+- **Render-queue status numbers are runtime values.** Never hardcode them; read `RQItemStatus` from the
+  AE global. On 23.6, `3013` = `NEEDS_OUTPUT`, `3015` = `QUEUED`, `3019` = `DONE`.
+- **Text justification** must be assigned the `ParagraphJustification` enum (or its numeric constant), not
+  a raw string. `fauxBold`, `fauxItalic` and `allCaps` are read-only in AE 23.6; use a bold/italic font or
+  capitals instead.
+- **Render output defaults to MP4/H.264.** A `.mp4` output with no `outputModule` auto-applies the
+  installed H.264 template; other formats need an explicit request.
 - The panel only loads at After Effects startup — restart AE after installing.
 - `%APPDATA%\offhand` holds `token`, `bridge.json`, `settings.json`, `logs/usage.jsonl`. A stale token from
   another install causes `TOKEN_MISMATCH`; deleting that one file (or re-running the installer) fixes it.

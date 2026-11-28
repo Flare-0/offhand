@@ -8,7 +8,7 @@ export const renderTool: ToolDefinition = {
   name: 'render',
   title: 'Render & Frame Preview',
   description:
-    'Save a single composition frame to PNG, queue a composition to the After Effects Render Queue, start a queued render job, inspect jobs and queue status, or clear the render queue. Rendering is synchronous: action=start blocks until After Effects finishes, so prefer queueing and checking jobs later.',
+    'Save a single composition frame to PNG, queue a composition to the After Effects Render Queue, start a queued render job, inspect jobs and queue status, or clear the render queue. Always render MP4/H.264 unless the user explicitly asks for another format: pass output ending in .mp4 and the host applies the H.264 output-module template automatically. Rendering is synchronous: action=start blocks until After Effects finishes, so prefer queueing and checking jobs later.',
   inputSchema: {
     action: z
       .enum(['frame', 'queue', 'start', 'jobs', 'status', 'clear'])
@@ -30,7 +30,9 @@ export const renderTool: ToolDefinition = {
       .string()
       .min(1)
       .optional()
-      .describe('Output media file path for action="queue".'),
+      .describe(
+        'Output media file path for action="queue". Prefer an .mp4 path: the host applies the H.264 output-module template automatically. Only use another format when the user explicitly asks for it.',
+      ),
     template: z
       .string()
       .optional()
@@ -38,7 +40,9 @@ export const renderTool: ToolDefinition = {
     outputModule: z
       .string()
       .optional()
-      .describe('Output module template name for action="queue" (e.g. "Lossless").'),
+      .describe(
+        'Output module template name for action="queue" (e.g. "H.264 - Match Render Settings - 15 Mbps"). Optional: an .mp4 output selects an H.264 template automatically.',
+      ),
     start: z
       .boolean()
       .optional()

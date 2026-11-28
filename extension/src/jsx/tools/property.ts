@@ -11,6 +11,57 @@ Offhand.tools = Offhand.tools || {};
     }
   }
 
+  // Numeric values (a number or a vector of numbers) can be compared against
+  // what AE reports after the write, which catches silent no-ops such as
+  // setting a locked or expression-driven property.
+  function numericValue(value) {
+    if (typeof value === "number" && isFinite(value)) return [value];
+    if (value instanceof Array) {
+      var out = [];
+      for (var i = 0; i < value.length; i += 1) {
+        if (typeof value[i] !== "number" || !isFinite(value[i])) return null;
+        out.push(value[i]);
+      }
+      return out;
+    }
+    return null;
+  }
+
+  function sameVector(a, b) {
+    if (!a || !b || a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i += 1) {
+      if (Math.abs(a[i] - b[i]) > 0.0001) return false;
+    }
+    return true;
+  }
+
+  function describe(value) {
+    try {
+      return Offhand.json.stringify(value);
+    } catch (error) {
+      return String(value);
+    }
+  }
+
+  function verifyApplied(util, prop, before, after, requested, args, coerced) {
+    if (args.time !== undefined || (prop.numKeys || 0) > 0) return;
+    if (!requested) return;
+    var beforeVector = numericValue(before);
+    // An intentional write of the current value is not a no-op.
+    if (beforeVector && sameVector(beforeVector, requested)) return;
+    var changed = util.diff({ value: before }, { value: after });
+    if (!changed.hasOwnProperty("value")) {
+      util.fail(
+        "INVALID_STATE",
+        'Setting "' + prop.name + '" did not change its value.',
+        "The property is likely locked, driven by an expression, or not directly editable. " +
+          "Coerced value: " +
+          describe(coerced) +
+          ".",
+      );
+    }
+  }
+
   function applyEase(util, prop, keyIndex, easeMode) {
     if (!easeMode || easeMode === "linear") {
       if (typeof KeyframeInterpolationType !== "undefined") {
@@ -107,16 +158,19 @@ Offhand.tools = Offhand.tools || {};
       }
       var valueBefore = readSafe(util, prop);
       var keysBefore = prop.numKeys || 0;
+      var coerced;
       if (prop.numKeys && prop.numKeys > 0 && args.time === undefined) {
-        util.setValue(prop, args.value, comp.time);
+        coerced = util.setValue(prop, args.value, comp.time);
       } else {
-        util.setValue(prop, args.value, args.time);
+        coerced = util.setValue(prop, args.value, args.time);
       }
+      var valueAfter = readSafe(util, prop);
+      verifyApplied(util, prop, valueBefore, valueAfter, numericValue(args.value), args, coerced);
       var setResult = util.propertyInfo(prop, false);
       setResult.layer = layer.name;
       setResult.layerId = layer.id;
       setResult.path = args.path;
-      setResult.changed = { value: { from: valueBefore, to: readSafe(util, prop) } };
+      setResult.changed = { value: { from: valueBefore, to: valueAfter } };
       if ((prop.numKeys || 0) !== keysBefore) {
         setResult.changed.keyframes = { from: keysBefore, to: prop.numKeys || 0 };
       }
@@ -140,7 +194,11 @@ Offhand.tools = Offhand.tools || {};
       keyResult.layerId = layer.id;
       keyResult.path = args.path;
       keyResult.keyIndex = keyIndex;
-      keyResult.changed = { value: { from: keyValueBefore, to: readSafe(util, prop) } };
+      keyResult.changed = {};
+      var keyValueAfter = readSafe(util, prop);
+      if (!util.same(keyValueBefore, keyValueAfter)) {
+        keyResult.changed.value = { from: keyValueBefore, to: keyValueAfter };
+      }
       if ((prop.numKeys || 0) !== keyCountBefore) {
         keyResult.changed.keyframes = { from: keyCountBefore, to: prop.numKeys || 0 };
       }
@@ -168,8 +226,11 @@ Offhand.tools = Offhand.tools || {};
       remResult.path = args.path;
       remResult.changed = {
         keyframes: { from: keyCountBefore, to: prop.numKeys || 0 },
-        value: { from: keyValueBefore, to: readSafe(util, prop) },
       };
+      var remValueAfter = readSafe(util, prop);
+      if (!util.same(keyValueBefore, remValueAfter)) {
+        remResult.changed.value = { from: keyValueBefore, to: remValueAfter };
+      }
       return remResult;
     }
 

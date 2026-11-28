@@ -6,6 +6,7 @@
 // `dist/cep/host/offhand.jsx` instead of failing the call.
 
 import { dispatch as dispatchHost } from "../host";
+import { Offhand } from "../core/state";
 
 const legacyDispatch = (tool: string, argsJson: string): string | null => {
   try {
@@ -27,9 +28,16 @@ const legacyDispatch = (tool: string, argsJson: string): string | null => {
 
 export const dispatch = (tool: string, argsJson: string): string => {
   try {
-    const result = dispatchHost(tool, argsJson);
-    if (result.indexOf('"UNKNOWN_TOOL"') === -1) return result;
-    return legacyDispatch(tool, argsJson) ?? result;
+    // Only fall back when this build has no handler for the requested tool.
+    // A handler that *returns* an UNKNOWN_TOOL error (batch does, for a bad
+    // nested call) must not trigger the legacy tree.
+    const registered =
+      typeof Offhand !== "undefined" && Offhand.tools && Offhand.tools[tool];
+    if (!registered) {
+      const legacy = legacyDispatch(tool, argsJson);
+      if (legacy !== null) return legacy;
+    }
+    return dispatchHost(tool, argsJson);
   } catch (error) {
     return JSON.stringify({
       ok: false,

@@ -67,9 +67,10 @@ reinstalling. See [docs/install.md](docs/install.md) for the full walkthrough an
 
 ## Status
 
-`0.2.0` — a working end-to-end preview. **Phases A–E of the rewrite are complete**; A–D were verified
-live: the panel hosts the bridge inside After Effects, the MCP server dials in, and the ExtendScript host
-is compiled from TypeScript to ES3.
+`0.2.0` — a working end-to-end preview. **Phases A–E of the rewrite are complete and verified live on
+AE 2023**: the panel hosts the bridge inside After Effects, the MCP server dials in, and the ExtendScript
+host is compiled from TypeScript to ES3. The full 15-tool surface has been exercised through the real
+MCP → WebSocket → panel → host chain.
 
 All 15 tools are implemented on both sides: `status`, `docs`, `project`, `comp`, `layer`, `property`,
 `effect`, `text`, `shape`, `mask`, `render`, `assets`, `view`, `batch`, and the `execute` escape hatch.
@@ -80,7 +81,6 @@ jobs, and `offhand patterns` turns repeated `execute` scripts into candidates fo
 
 Known gaps, tracked in [ROADMAP.md](ROADMAP.md):
 
-- Not every tool has a live smoke test on AE 2023 yet (`status`, `project`, `comp` do).
 - `render start` blocks until After Effects finishes; no progress stream yet.
 - Mac is untested; the installer is Windows-only.
 - npm publish is Phase H.
@@ -125,6 +125,21 @@ diagnosis:
 | `TOKEN_MISMATCH` | Tokens disagree | Re-run the installer (it rewrites both sides' token) |
 | `VERSION_MISMATCH` | Server and panel protocols differ | Update both; old `bridge.json` v1 files are rejected |
 | `AE_BUSY` | A modal dialog is blocking ExtendScript | Close the dialog in After Effects, then retry |
+
+## Rendering
+
+`render` defaults to **MP4 / H.264**. Pass an `.mp4` output path and the host applies the installed
+H.264 output-module template automatically, so you do not need to know AE's template names:
+
+```js
+render({ action: "queue", comp: "Main", output: "C:/work/main.mp4", start: true })
+```
+
+Only choose another container or codec when the user explicitly asks for it (for example a PNG
+sequence or ProRes `.mov`), and then pass `outputModule` yourself. If no H.264 template is installed,
+the result includes a `note` instead of silently writing a file whose contents do not match its
+extension. Render-queue status names are read from the installed build's `RQItemStatus` constants, so
+they stay correct across AE versions.
 
 ## Tools
 

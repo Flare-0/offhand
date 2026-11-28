@@ -2,12 +2,12 @@
 
 A clear breakdown of what is built, what is verified, and what still needs to be built or tested.
 
-> **0.2.0 (unreleased)** is the Phase E surface: stable layer ids, write diffs, `batch`, `detail`,
-> render jobs and `offhand patterns`.
+> **0.2.0** (Phase E) released 2026-11-28 — GitHub Release
+> [`v0.2.0`](https://github.com/Flare-0/offhand/releases/tag/v0.2.0) with the built panel attached:
+> stable layer ids, write diffs, `batch`, `detail`, render jobs and `offhand patterns`.
 >
 > **0.1.0 public preview** released 2026-11-25 — GitHub Release
-> [`v0.1.0`](https://github.com/Flare-0/offhand/releases/tag/v0.1.0) with the built panel attached; repo is
-> public. Install on Windows with
+> [`v0.1.0`](https://github.com/Flare-0/offhand/releases/tag/v0.1.0); repo is public. Install on Windows with
 > `irm https://raw.githubusercontent.com/Flare-0/offhand/main/scripts/setup-windows.ps1 | iex`.
 > Docs: [`CHANGELOG.md`](CHANGELOG.md), [`docs/install.md`](docs/install.md), and
 > [`CONTEXT.md`](CONTEXT.md) for the current working state. Phases A–E are complete; F–H follow below.
@@ -156,7 +156,7 @@ bridge architecture is being **flipped**. Everything in "Rewrite plan" below is 
       - `tests/tools.test.ts`'s "matching `.jsx` exists" check still passes: the legacy
         `extension/host/` tree stays in the repo (not deleted) as the fallback, per the phase-A rule.
 - [x] **E. Tool surface** — layer IDs, write diffs, `batch`, `detail`, render jobs, execute promotion.
-      **Done (2026-11-26, 0.2.0; checks green, live AE pass pending).**
+      **Done and live-verified (2026-11-28, 0.2.0).**
       - Stable layer ids: `layerInfo` carries `id`, every selector accepts `#42` / `id:42`, and
         `findLayerById` fails with a `NOT_FOUND` + `layer action="list"` hint. Ids are the documented
         default because they survive renames and reordering.
@@ -172,9 +172,10 @@ bridge architecture is being **flipped**. Everything in "Rewrite plan" below is 
         `Offhand.jobs` and are synced from the AE render queue. `start` is synchronous and says so.
       - Execute promotion: `log.ts` groups repeated `execute` reasons (`readExecutePatterns`,
         `suggestTool`) and `offhand patterns` prints counts, error codes and the candidate typed tool.
-      - Tests: 6 files / 29 tests (new `patterns` suite; schema coverage for batch/detail/render).
-        `typecheck`, `test`, `lint`, `build`, `build:extension` all pass.
-- [ ] **F. Testability** — fake panel, mock AE object model, eval task set.
+      - Tests: 10 files / 84 tests, including a mock After Effects object model that runs every typed
+        tool end to end (`tests/support/ae-mock.ts`, `tests/host-*.test.ts`).
+- [ ] **F. Testability** — fake panel, mock AE object model, eval task set. (The fake panel and mock AE
+      host landed during the Phase E live-fix round; the eval task set is still open.)
 - [ ] **G. Security/install** — `offhand install`, `offhand doctor --fix`, audit-log surfacing.
       (The raw-script toggle landed early, in Phase C.)
 - [ ] **H. Docs + live AE verification** — README, `docs/*`, smoke test in AE 2023, then npm publish.
@@ -182,8 +183,12 @@ bridge architecture is being **flipped**. Everything in "Rewrite plan" below is 
 > **Phase D done 2026-11-25**: host ported into `src/jsx` (build green: 44 modules, jsx bundle
 > ~100 KB, handlers verified present). Root `typecheck`, 24 tests, `lint` green. Live reload of the
 > panel to exercise the new bundle still pending (it is exercised implicitly by every later live call).
-> **Phase E done 2026-11-26** (0.2.0): stable layer ids, write diffs, `batch`, `detail`, render jobs and
-> `offhand patterns`. Live AE pass of the new actions still pending; next up is Phase F (testability).
+> **Phase E shipped as 0.2.0 on 2026-11-28.** The full 15-tool surface was exercised live in AE 2023
+> (23.6x62) through the real MCP → WS → panel queue → host chain. The live sweep found and fixed
+> runtime `RQItemStatus` labels, MP4/H.264 queue defaults, `assets` `path`/`paths`, `property set`
+> read-back verification, 2D/3D vector reads, text justification/read-only attributes, shape and
+> render-job diffs; tests grew to 10 files / 84 tests with a mock AE host. Next up is Phase F
+> (the eval task set; the fake panel and mock AE model are already in place).
 > Note: `offhand-mcp` is **not on npm** (`npm view` → 404), so MCP clients must launch
 > `node D:/Projects/offhand/dist/cli.js` until Phase H publishes it. Restarting the client after a
 > rebuild is required — an MCP server keeps running the code it was started with.
@@ -201,7 +206,7 @@ bridge architecture is being **flipped**. Everything in "Rewrite plan" below is 
 ### 1. What's Built & Working (Verified)
 
 ### Core MCP Server & Bridge (`src/`)
-- **MCP Server (`src/server/server.ts`)**: Registers all 14 tools via `@modelcontextprotocol/sdk`, handles graceful shutdown, never writes to `stdout`.
+- **MCP Server (`src/server/server.ts`)**: Registers all 15 tools via `@modelcontextprotocol/sdk`, handles graceful shutdown, never writes to `stdout`.
 - **WebSocket Bridge (`src/server/bridge.ts`)**: Server owns `ws://127.0.0.1:<port>`, CEP panel connects out as client. Token auth (`%APPDATA%\offhand\token`), config (`%APPDATA%\offhand\bridge.json`), 15s heartbeat, 45s stale timeout, hardened reconnect.
 - **Error & Result Formatting (`src/shared/errors.ts`, `src/server/tools/result.ts`)**: `OffhandError` with `[CODE] message` + `Hint:` + optional `Details:`.
 - **CLI & Diagnostics (`src/cli.ts`, `src/server/doctor.ts`, `src/server/log.ts`)**: `offhand`, `offhand doctor`, JSONL usage logging (`%APPDATA%\offhand\logs\usage.jsonl`).
@@ -223,9 +228,9 @@ bridge architecture is being **flipped**. Everything in "Rewrite plan" below is 
 
 ---
 
-### 2. All 14 MCP Tools (Implemented, Needs Live AE Smoke Test)
+### 2. All 15 MCP Tools (Implemented, Live-Verified in AE 2023)
 
-Every tool has a TypeScript definition in `src/server/tools/<name>.ts` (registered in `src/server/tools/registry.ts`) and an ES3 ExtendScript handler in `extension/host/tools/<name>.jsx` (loaded in `extension/host/offhand.jsx`).
+Every tool has a TypeScript definition in `src/server/tools/<name>.ts` (registered in `src/server/tools/registry.ts`) and an ES3 ExtendScript handler in `extension/src/jsx/tools/<name>.ts` (compiled into `dist/cep/jsx/index.js`). The legacy `extension/host/tools/*.jsx` handlers remain only as a fallback.
 
 | Tool | Type | Actions / Purpose | Undo Group |
 | --- | --- | --- | --- |
@@ -239,10 +244,11 @@ Every tool has a TypeScript definition in `src/server/tools/<name>.ts` (register
 | `text` | Typed | `get`, `create`, `set` (content, font, size, color, stroke, tracking, leading, justify) | Yes |
 | `shape` | Typed | `get`, `create`, `set` (rect, ellipse, star, polygon, custom path, fill/stroke) | Yes |
 | `mask` | Typed | `list`, `get`, `create`, `set`, `remove` (bounds, vertices, mode, feather, opacity, expansion) | Yes |
-| `render` | Typed | `frame` (PNG preview), `queue`, `status`, `clear` | Yes |
+| `render` | Typed | `frame` (PNG preview), `queue`, `start`, `jobs`, `status`, `clear` | Yes |
 | `assets` | Typed | `list`, `import`, `replace`, `folder`, `remove` | Yes |
 | `view` | Typed | `open`, `time`, `select` | No |
 | `execute` | Escape hatch | Raw ExtendScript with logged `reason` | Yes |
+| `batch` | Typed | Up to 20 sequential typed calls in one round trip and one undo group | Yes |
 
 ---
 

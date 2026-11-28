@@ -3,8 +3,101 @@
 Offhand.tools = Offhand.tools || {};
 
 (function () {
+  // AE exposes RQItemStatus as a name -> number map. Read the installed build's
+  // values live instead of guessing the numeric table, so labels stay correct
+  // across versions. Status may arrive as a number or (rarely) as a name.
+  var STATUS_NAMES = [
+    "WILL_CONTINUE",
+    "NEEDS_OUTPUT",
+    "UNQUEUED",
+    "QUEUED",
+    "RENDERING",
+    "USER_STOPPED",
+    "ERR_STOPPED",
+    "ERR_INVALID_OUTPUT_PATH",
+    "DONE",
+  ];
+
+  var STATUS_TABLE: any = null;
+
+  function statusTable() {
+    if (STATUS_TABLE) return STATUS_TABLE;
+    var table: any = {};
+    try {
+      if (typeof RQItemStatus !== "undefined" && RQItemStatus) {
+        for (var i = 0; i < STATUS_NAMES.length; i += 1) {
+          var name = STATUS_NAMES[i];
+          var value = RQItemStatus[name];
+          if (value !== undefined && value !== null) table[String(value)] = name;
+        }
+        for (var key in RQItemStatus) {
+          var raw = RQItemStatus[key];
+          if (raw !== undefined && raw !== null && table[String(raw)] === undefined) {
+            table[String(raw)] = String(key);
+          }
+        }
+      }
+    } catch (error) {
+      table = {};
+    }
+    STATUS_TABLE = table;
+    return table;
+  }
+
+  function statusLabel(status) {
+    var text = String(status);
+    var table = statusTable();
+    if (table[text]) return table[text];
+    // Some host builds stringify the enum to its name instead of its number.
+    var normalized = text.toUpperCase().replace(/[\s-]+/g, "_");
+    for (var i = 0; i < STATUS_NAMES.length; i += 1) {
+      if (normalized === STATUS_NAMES[i]) return STATUS_NAMES[i];
+    }
+    return text;
+  }
+
+  function jobState(status) {
+    var label = statusLabel(status);
+    if (label === "DONE") return "done";
+    if (label === "RENDERING" || label === "WILL_CONTINUE") return "rendering";
+    if (
+      label === "USER_STOPPED" ||
+      label === "ERR_STOPPED" ||
+      label === "ERR_INVALID_OUTPUT_PATH" ||
+      label === "NEEDS_OUTPUT" ||
+      label === "UNQUEUED"
+    ) {
+      return "failed";
+    }
+    return "queued";
+  }
+
+  var H264_TEMPLATE = /h\.?\s*264/i;
+  var MP4_TEMPLATE = /(mp4|mpeg-?4)/i;
+
   function now() {
     return new Date().getTime();
+  }
+
+  // OutputModule.templates is the list installed for this build. Pick the
+  // first H.264/MP4 template so an .mp4 output target gets a matching module
+  // even when the caller does not name one.
+  function findOutputTemplate(om, pattern) {
+    var templates = [];
+    try {
+      templates = om.templates || [];
+    } catch (error) {
+      templates = [];
+    }
+    for (var i = 0; i < templates.length; i += 1) {
+      var name = String(templates[i]);
+      if (pattern.test(name)) return name;
+    }
+    return null;
+  }
+
+  function isMp4Path(path) {
+    return typeof path === "string" && /\.mp4$/i.test(path);
   }
 
   function queueStatus(util, rq) {
@@ -19,10 +112,13 @@ Offhand.tools = Offhand.tools || {};
       } catch (error) {
         output = null;
       }
+      var rawStatus = String(item.status);
       items.push({
         index: i,
         comp: item.comp ? item.comp.name : null,
-        status: String(item.status),
+        status: rawStatus,
+        statusName: statusLabel(rawStatus),
+        state: jobState(rawStatus),
         output: output,
       });
     }
@@ -71,11 +167,13 @@ Offhand.tools = Offhand.tools || {};
 
   function queueIndexFor(util, rq, rqItem) {
     try {
-      return rqItem.index;
+      var index = rqItem.index;
+      if (typeof index === "number" && index >= 1) return index;
     } catch (indexError) {
-      for (var i = 1; i <= rq.numItems; i += 1) {
-        if (rq.item(i) === rqItem) return i;
-      }
+      // fall through to identity/position lookup
+    }
+    for (var i = 1; i <= rq.numItems; i += 1) {
+      if (rq.item(i) === rqItem) return i;
     }
     return rq.numItems;
   }
@@ -89,15 +187,18 @@ Offhand.tools = Offhand.tools || {};
         job.error = "Render-queue item was removed.";
       } else {
         var status = String(rq.item(job.queueIndex).status);
-        if (status === "Rendered") {
-          job.status = "done";
-        } else if (status === "Failed" || status === "User Stopped" || status === "Needs Output File") {
-          job.status = "failed";
-          job.error = status;
-        } else if (status === "Rendering") {
-          job.status = "rendering";
+        var state = jobState(status);
+        job.status = state as any;
+        if (state === "failed") {
+          job.error = "After Effects stopped the render (" + statusLabel(status) + ").";
+        } else if (state === "done") {
+          job.error = undefined;
         } else {
-          job.status = "queued";
+          job.error = undefined;
+          // A job that went back to the queue must not keep the timestamps of
+          // a previous attempt.
+          job.finishedAt = undefined;
+          job.ms = undefined;
         }
       }
     } catch (statusError) {
@@ -105,8 +206,10 @@ Offhand.tools = Offhand.tools || {};
       job.error = String(statusError);
     }
     if (job.status === "done" || job.status === "failed") {
-      job.finishedAt = now();
-      job.ms = job.finishedAt - (job.startedAt === undefined ? job.queuedAt : job.startedAt);
+      if (job.finishedAt === undefined) {
+        job.finishedAt = now();
+        job.ms = job.finishedAt - (job.startedAt === undefined ? job.queuedAt : job.startedAt);
+      }
     }
   }
 
@@ -121,6 +224,9 @@ Offhand.tools = Offhand.tools || {};
     for (var i = 0; i < jobs.length; i += 1) {
       jobs[i].status = "rendering";
       jobs[i].startedAt = now();
+      jobs[i].finishedAt = undefined;
+      jobs[i].ms = undefined;
+      jobs[i].error = undefined;
     }
     try {
       rq.render();
@@ -208,13 +314,31 @@ Offhand.tools = Offhand.tools || {};
       }
 
       var outputPath = null;
+      var appliedModule = null;
+      var notes = [];
       if (rqItem.numOutputModules > 0) {
         var om = rqItem.outputModule(1);
-        if (args.outputModule) {
+        var moduleName = args.outputModule ? String(args.outputModule) : null;
+        if (!moduleName && isMp4Path(args.output)) {
+          // Default to H.264 for .mp4 targets; the Lossless default would
+          // otherwise write a QuickTime file with the wrong extension.
+          moduleName = findOutputTemplate(om, H264_TEMPLATE) || findOutputTemplate(om, MP4_TEMPLATE);
+          if (!moduleName) {
+            notes.push(
+              "No H.264/MP4 output-module template is installed; pass outputModule to pick one.",
+            );
+          }
+        }
+        if (moduleName) {
           try {
-            om.applyTemplate(String(args.outputModule));
+            om.applyTemplate(moduleName);
+            appliedModule = moduleName;
           } catch (omError) {
-            util.fail("INVALID_ARGS", 'Unknown output module template "' + args.outputModule + '".');
+            if (args.outputModule) {
+              util.fail("INVALID_ARGS", 'Unknown output module template "' + args.outputModule + '".');
+            } else {
+              notes.push('Could not apply output module template "' + moduleName + '".');
+            }
           }
         }
         if (args.output) {
@@ -231,8 +355,22 @@ Offhand.tools = Offhand.tools || {};
       if (args.start === true) {
         renderNow(util, rq, [job]);
       }
-      var queuedOut = queueStatus(util, rq);
+      var queuedOut: any = queueStatus(util, rq);
       queuedOut.job = jobInfo(job);
+      queuedOut.outputModule = appliedModule;
+      if (args.output && outputPath) {
+        var wanted = String(args.output).toLowerCase();
+        var actual = String(outputPath).toLowerCase();
+        var wantedExt = wanted.indexOf(".") >= 0 ? wanted.substring(wanted.lastIndexOf(".")) : "";
+        var actualExt = actual.indexOf(".") >= 0 ? actual.substring(actual.lastIndexOf(".")) : "";
+        if (wantedExt && actualExt && wantedExt !== actualExt) {
+          notes.push(
+            'The output module wrote "' + actualExt + '" instead of "' + wantedExt +
+            '". Pass outputModule to choose a template that matches the format.',
+          );
+        }
+      }
+      if (notes.length > 0) queuedOut.note = notes.join(" ");
       return queuedOut;
     }
 

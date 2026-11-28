@@ -12,7 +12,8 @@ import { PANEL_PROTOCOL_VERSION } from "./types";
 export const BRIDGE_CONFIG_VERSION = 2 as const;
 export const BRIDGE_HOST = "127.0.0.1";
 export const PREFERRED_PORT = 47823;
-export const PANEL_VERSION = "0.1.0";
+// Keep in sync with extension/package.json (tests/versions.test.ts enforces it).
+export const PANEL_VERSION = "0.2.0";
 
 const TOKEN_PATTERN = /^[a-f0-9]{48}$/;
 

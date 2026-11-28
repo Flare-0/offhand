@@ -196,7 +196,7 @@ its flyout menu (or restart AE) before trusting the ported handlers in AE.
 
 ---
 
-### ✅ Phase E done (2026-11-26) — tool surface, 0.2.0
+### ✅ Phase E done (2026-11-28) — tool surface, 0.2.0 released
 
 The tools now behave like an agent surface rather than API wrappers. All of this is on **both** sides
 (host handler + server schema) and covered by tests.
@@ -222,17 +222,33 @@ The tools now behave like an agent surface rather than API wrappers. All of this
   `suggestTool(reason)`, grouping by normalised `reason` (the logged script is replaced by
   `<N chars>`). `offhand patterns` prints them; `docs/tools.md` documents the promotion loop.
 - **Tests.** `tests/tools.test.ts` now asserts 15 tools and checks handlers exist in
-  `extension/src/jsx/tools/` (the `.jsx` fallback is no longer the contract). New
-  `tests/patterns.test.ts`. **6 files / 29 tests.** Versions bumped to 0.2.0 in root, extension,
+  `extension/src/jsx/tools/` (the `.jsx` fallback is no longer the contract); new
+  `tests/patterns.test.ts`, `tests/host-eval.test.ts`, `tests/host-property.test.ts`,
+  `tests/host-assets.test.ts`, `tests/support/ae-mock.ts` and `tests/versions.test.ts`.
+  **10 files / 84 tests.** Versions bumped to 0.2.0 in root, extension,
   `src/shared/version.ts` and `core/state.ts`.
 
-**Checks:** `typecheck`, `test` (6/29), `lint`, `build` (74 KB cli), `build:extension` (251 KB panel)
-all green; `eval` warnings from `core/json.ts` / `tools/execute.ts` are expected.
+**Checks:** `typecheck`, `test` (10/84), `lint`, `build` (74.6 KB cli), `build:extension`
+(251 KB panel) all green; `eval` warnings from `core/json.ts` / `tools/execute.ts` are expected.
 
-**Live AE pass still pending** for the new actions (ids, diffs, batch, detail, render jobs).
+**Live AE pass complete (2026-11-28, AE 23.6x62).** Every one of the 15 tools was exercised through the
+real MCP → WebSocket → panel queue → host chain. The sweep found and fixed, in the same release:
 
-**Next phase: F — testability** (fake panel already exists in tests; add a mock AE object model and an
-eval task set so the host handlers can be tested without After Effects).
+- `RQItemStatus` labels were wrong from the hardcoded table; they now come from AE's runtime constants
+  (on 23.6: `3013` = `NEEDS_OUTPUT`, `3015` = `QUEUED`, `3019` = `DONE`).
+- `render queue` with a `.mp4` output now applies the installed H.264 output-module template when no
+  `outputModule` is given. Always recommend MP4/H.264 in docs unless the user asks for another format.
+- `assets import` accepts `path` or `paths`, a string or array, and never passes `undefined` to `fileFor`.
+- `property set` reads the value back and fails `INVALID_STATE` if the write was a no-op.
+- `text set` uses the `ParagraphJustification` enum; `fauxBold`/`fauxItalic`/`allCaps` are rejected with a
+  clear `INVALID_ARGS` because AE exposes them read-only; the false "No values changed." note is gone.
+- Vector values (`shape size`, mask `feather`, `transform.scale`) read as numeric arrays even when AE
+  reports no enum value type; 2D writes are padded to 3D.
+- `render start` verified end to end: a 3 s comp produced a valid 32 KB MP4 (`ftyp mp42`), and
+  `render frame` produced a PNG.
+
+**Next phase: F — testability.** The fake panel and mock AE host are in place; what remains is the
+10–20 task eval set that measures success rate, tool calls, tokens and `execute` usage.
 
 ---
 
@@ -507,13 +523,11 @@ Tests live in `tests/`. They test the TypeScript layer only — no AE or CEP nee
 
 ## What to do next (suggested order)
 
-Phases A–E are done; the live plan is in [`ROADMAP.md`](ROADMAP.md) § *Rewrite phases*.
+Phases A–E are done and live-verified; the live plan is in [`ROADMAP.md`](ROADMAP.md) § *Rewrite phases*.
 
-1. **Live-check Phase E** — reload the panel (flyout → Reload) or restart AE, then exercise `layer list`
-   (ids), a `layer set` (diff), a `batch`, `detail: "full"`, and `render jobs`. The legacy `host/`
-   fallback and `dist/cep/host/` copy are still in place if something breaks.
-2. **Phase F — testability** — fake panel exists; add a mock AE object model and a 10–20 task eval set
-   so host handlers can be exercised without After Effects.
-3. **Phase G — install/doctor** — `offhand install`, `offhand doctor --fix`, audit-log surfacing.
-4. **Phase H — docs + live verification + npm publish** — then switch the MCP config from
+1. **Phase F — testability** — the fake panel and mock AE host already exist (`tests/bridge.test.ts`,
+   `tests/support/ae-mock.ts`). Add the 10–20 task eval set and use it to measure success rate, tool
+   calls, tokens and `execute` usage.
+2. **Phase G — install/doctor** — `offhand install`, `offhand doctor --fix`, audit-log surfacing.
+3. **Phase H — docs + npm publish** — then switch the MCP config from
    `node D:/Projects/offhand/dist/cli.js` to `npx -y offhand-mcp`.

@@ -66,9 +66,14 @@ Offhand.tools = Offhand.tools || {};
       }
       var result = readTextLayer(util, target);
       result.changed = util.diff(before, result);
-      if (!result.changed.text && !result.changed.name && !result.changed.position) {
-        result.note = "No values changed.";
+      var changedAny = false;
+      for (var changedKey in result.changed) {
+        if (result.changed.hasOwnProperty(changedKey)) {
+          changedAny = true;
+          break;
+        }
       }
+      if (!changedAny) result.note = "No values changed.";
       return result;
     }
 
