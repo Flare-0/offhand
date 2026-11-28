@@ -2,6 +2,10 @@
 
 A clear breakdown of what is built, what is verified, and what still needs to be built or tested.
 
+> **0.3.0** (hardening) released 2026-11-28 — GitHub Release
+> [`v0.3.0`](https://github.com/Flare-0/offhand/releases/tag/v0.3.0) with the built panel attached:
+> stable layer uids, reorder by neighbor, scheduled renders with fast polling, and reload-safe job history.
+>
 > **0.2.0** (Phase E) released 2026-11-28 — GitHub Release
 > [`v0.2.0`](https://github.com/Flare-0/offhand/releases/tag/v0.2.0) with the built panel attached:
 > stable layer ids, write diffs, `batch`, `detail`, render jobs and `offhand patterns`.
@@ -10,7 +14,7 @@ A clear breakdown of what is built, what is verified, and what still needs to be
 > [`v0.1.0`](https://github.com/Flare-0/offhand/releases/tag/v0.1.0); repo is public. Install on Windows with
 > `irm https://raw.githubusercontent.com/Flare-0/offhand/main/scripts/setup-windows.ps1 | iex`.
 > Docs: [`CHANGELOG.md`](CHANGELOG.md), [`docs/install.md`](docs/install.md), and
-> [`CONTEXT.md`](CONTEXT.md) for the current working state. Phases A–E are complete; F–H follow below.
+> [`CONTEXT.md`](CONTEXT.md) for the current working state. Phases A–E are complete; F–G follow below.
 
 ---
 
@@ -187,8 +191,10 @@ bridge architecture is being **flipped**. Everything in "Rewrite plan" below is 
 > (23.6x62) through the real MCP → WS → panel queue → host chain. The live sweep found and fixed
 > runtime `RQItemStatus` labels, MP4/H.264 queue defaults, `assets` `path`/`paths`, `property set`
 > read-back verification, 2D/3D vector reads, text justification/read-only attributes, shape and
-> render-job diffs; tests grew to 10 files / 84 tests with a mock AE host. Next up is Phase F
-> (the eval task set; the fake panel and mock AE model are already in place).
+> render-job diffs; tests grew to 10 files / 84 tests with a mock AE host. **0.3.0 followed on
+> 2026-11-28** with layer uids, reorder by neighbor, scheduled renders with cached polling, and
+> reload-safe job history; tests are now 11 files / 100 tests. Next up is Phase F (the eval task set;
+> the fake panel and mock AE model are already in place).
 > Note: `offhand-mcp` is **not on npm** (`npm view` → 404), so MCP clients must launch
 > `node D:/Projects/offhand/dist/cli.js`. Restarting the client after a rebuild is required - an MCP
 > server keeps running the code it was started with.

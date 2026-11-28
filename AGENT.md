@@ -195,7 +195,7 @@ its flyout menu (or restart AE) before trusting the ported handlers in AE.
 
 ---
 
-### ✅ Phase E done (2026-11-28) — tool surface, 0.2.0 released
+### ✅ Phase E + 0.3.0 hardening done (2026-11-28) — tool surface and stable uids released
 
 The tools now behave like an agent surface rather than API wrappers. All of this is on **both** sides
 (host handler + server schema) and covered by tests.
