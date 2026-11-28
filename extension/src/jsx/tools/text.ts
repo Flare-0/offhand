@@ -1,4 +1,4 @@
-﻿import { Offhand } from "../core/state";
+import { Offhand } from "../core/state";
 
 Offhand.tools = Offhand.tools || {};
 
@@ -18,7 +18,7 @@ Offhand.tools = Offhand.tools || {};
     }
     var prop = layer.property("Source Text");
     var info = util.textDocInfo(prop.value);
-    info.index = layer.index;
+    info.uid = util.layerUid(layer);
     info.name = layer.name;
     info.position = util.readValue(layer.property("ADBE Transform Group").property("ADBE Position"));
     return info;
@@ -46,7 +46,7 @@ Offhand.tools = Offhand.tools || {};
         setPosition(util, created, args.position);
       }
       var createdResult = readTextLayer(util, created);
-      createdResult.created = { id: created.id, name: created.name };
+      createdResult.created = { uid: util.layerUid(created), name: created.name };
       return createdResult;
     }
 

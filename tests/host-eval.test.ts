@@ -109,14 +109,57 @@ describe("layer", () => {
     const result = run("layer", { action: "duplicate", layer: "Solid 1" });
     expect(result.ok).toBe(true);
     expect(result.data.created.name).toContain("Solid 1");
+    expect(result.data.created.uid).toMatch(/^L\d+$/);
+    expect(result.data.changed.duplicateOf.from).toMatch(/^L\d+$/);
     expect(run("layer", { action: "list" }).data.total).toBe(2);
   });
 
   it("reorders a layer", () => {
     run("layer", { action: "create", type: "solid", name: "Top" });
-    const result = run("layer", { action: "reorder", layer: "Top", index: 2 });
+    const before = run("layer", { action: "list" }).data.items as Array<{ uid: string; name: string }>;
+    const topUid = before.find((item) => item.name === "Top")?.uid;
+    const solidUid = before.find((item) => item.name === "Solid 1")?.uid;
+    const result = run("layer", { action: "reorder", layer: "Top", after: "Solid 1" });
     expect(result.ok).toBe(true);
+    expect(result.data.uid).toBe(topUid);
+    expect(result.data.changed.neighbors.to.above).toBe(solidUid);
     expect(run("layer", { action: "list" }).data.items[1].name).toBe("Top");
+  });
+
+  it("exposes a stable uid and no layer index", () => {
+    const item = run("layer", { action: "list" }).data.items[0];
+    expect(item.uid).toMatch(/^L\d+$/);
+    expect(item).not.toHaveProperty("index");
+    expect(item).not.toHaveProperty("id");
+    const got = run("layer", { action: "get", layer: item.uid });
+    expect(got.ok).toBe(true);
+    expect(got.data.uid).toBe(item.uid);
+  });
+
+  it("resolves uid prefixes and never treats a numeric string as an index", () => {
+    const created = run("layer", { action: "create", type: "solid", name: "Top" });
+    const uid = created.data.uid as string;
+    const id = uid.slice(1);
+    expect(run("layer", { action: "get", layer: `#${id}` }).data.uid).toBe(uid);
+    expect(run("layer", { action: "get", layer: `id:${id}` }).data.uid).toBe(uid);
+    expect(run("layer", { action: "get", layer: `uid:${id}` }).data.uid).toBe(uid);
+    expect(run("layer", { action: "get", layer: Number(id) }).data.uid).toBe(uid);
+    expect(run("layer", { action: "get", layer: id }).data.uid).toBe(uid);
+    const numericString = run("layer", { action: "get", layer: "1" });
+    expect(numericString.ok).toBe(false);
+    expect(numericString.error.code).toBe("NOT_FOUND");
+  });
+
+  it("sets and clears a parent by uid", () => {
+    const child = run("layer", { action: "create", type: "solid", name: "Child" });
+    const parent = run("layer", { action: "create", type: "null", name: "Ctrl" });
+    const parentUid = parent.data.uid as string;
+    const set = run("layer", { action: "set", layer: child.data.uid, parent: parentUid });
+    expect(set.ok).toBe(true);
+    expect(set.data.changed.parent.to).toBe(parentUid);
+    expect(run("layer", { action: "get", layer: child.data.uid }).data.parentUid).toBe(parentUid);
+    const cleared = run("layer", { action: "set", layer: child.data.uid, parent: null });
+    expect(cleared.data.parentUid).toBe(null);
   });
 
   it("requires confirm to delete", () => {
@@ -125,6 +168,7 @@ describe("layer", () => {
     expect(refused.error.code).toBe("INVALID_ARGS");
     const deleted = run("layer", { action: "delete", layer: "Solid 1", confirm: true });
     expect(deleted.ok).toBe(true);
+    expect(deleted.data.removed.uid).toMatch(/^L\d+$/);
     expect(run("layer", { action: "list" }).data.total).toBe(0);
   });
 
@@ -291,9 +335,41 @@ describe("render", () => {
     const started = run("render", { action: "start" });
     expect(started.ok).toBe(true);
     expect(started.data.started).toBe(true);
+    expect(started.data.scheduled).toBe(true);
+    expect(started.data.blocking).toBe(false);
+    ae.runScheduled();
     const status = run("render", { action: "status" });
     expect(status.data.items[0].statusName).toBe("DONE");
     expect(status.data.items[0].state).toBe("done");
+  });
+
+  it("starts queued items after the panel loses its job memory", () => {
+    run("render", { action: "queue", comp: "Main", output: work("main.mp4") });
+    Offhand.jobs = [];
+    const started = run("render", { action: "start" });
+    expect(started.ok).toBe(true);
+    expect(started.data.scheduled).toBe(true);
+    expect(started.data.jobs).toHaveLength(1);
+    ae.runScheduled();
+    expect(run("render", { action: "status" }).data.items[0].statusName).toBe("DONE");
+  });
+
+  it("schedules queue start without blocking", () => {
+    const queued = run("render", { action: "queue", comp: "Main", output: work("main.mp4"), start: true });
+    expect(queued.ok).toBe(true);
+    expect(queued.data.scheduled).toBe(true);
+    expect(queued.data.blocking).toBe(false);
+    expect(queued.data.job.status).toBe("rendering");
+    ae.runScheduled();
+    expect(run("render", { action: "jobs" }).data.jobs[0].status).toBe("done");
+  });
+
+  it("refuses to clear while rendering", () => {
+    run("render", { action: "queue", comp: "Main", output: work("main.mp4") });
+    ae.renderQueue.rendering = true;
+    const refused = run("render", { action: "clear", confirm: true });
+    expect(refused.ok).toBe(false);
+    expect(refused.error.code).toBe("INVALID_STATE");
   });
 
   it("requires confirm to clear the queue", () => {
@@ -317,6 +393,26 @@ describe("view, status, project", () => {
     const result = run("view", { action: "select", layer: "Solid 1" });
     expect(result.ok).toBe(true);
     expect(result.data.selected[0].name).toBe("Solid 1");
+    expect(result.data.selected[0].uid).toMatch(/^L\d+$/);
+  });
+
+  it("opens a comp in the viewer", () => {
+    const result = run("view", { action: "open", comp: "Main" });
+    expect(result.ok).toBe(true);
+    expect(result.data.name).toBe("Main");
+  });
+
+  it("saves and opens a project file", () => {
+    const untitled = run("project", { action: "save" });
+    expect(untitled.ok).toBe(false);
+    expect(untitled.error.code).toBe("INVALID_ARGS");
+    const savePath = work("project.aep");
+    const saved = run("project", { action: "save", path: savePath });
+    expect(saved.ok).toBe(true);
+    expect(saved.data.saved).toBe(true);
+    const missing = run("project", { action: "open", path: work("missing.aep") });
+    expect(missing.ok).toBe(false);
+    expect(missing.error.code).toBe("NOT_FOUND");
   });
 
   it("reports bridge status", () => {

@@ -233,7 +233,7 @@ Offhand.tools = Offhand.tools || {};
       }
       var removedName = doomed.name;
       doomed.remove();
-      return { removed: true, name: removedName, layer: layer.name, layerId: layer.id };
+      return { removed: true, name: removedName, layer: layer.name, layerUid: util.layerUid(layer) };
     }
 
     util.fail("INVALID_ARGS", 'Unknown effect action "' + action + '".', "Use list, search, add, set, or remove.");

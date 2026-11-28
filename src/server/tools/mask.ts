@@ -19,7 +19,7 @@ export const maskTool: ToolDefinition = {
       .describe('Composition id or name. Defaults to the active composition.'),
     layer: selector
       .optional()
-      .describe('Layer index or name. Defaults to the first selected layer.'),
+      .describe('Layer uid ("L123") or name. Defaults to the first selected layer.'),
     mask: selector
       .optional()
       .describe('Mask 1-based index or name for get/set/remove.'),

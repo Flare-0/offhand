@@ -220,13 +220,28 @@ Offhand.tools = Offhand.tools || {};
     }
   }
 
-  function renderNow(util, rq, jobs) {
+  function markRendering(jobs) {
     for (var i = 0; i < jobs.length; i += 1) {
       jobs[i].status = "rendering";
       jobs[i].startedAt = now();
       jobs[i].finishedAt = undefined;
       jobs[i].ms = undefined;
       jobs[i].error = undefined;
+    }
+  }
+
+  // app.scheduleTask returns to the caller before AE starts rendering, so a
+  // long render cannot exceed the bridge deadline. If scheduling is not
+  // available, fall back to the old blocking path.
+  function scheduleRender(util, rq, jobs) {
+    markRendering(jobs);
+    if (typeof app.scheduleTask === "function") {
+      try {
+        app.scheduleTask("app.project.renderQueue.render()", 100, false);
+        return true;
+      } catch (scheduleError) {
+        // fall through to synchronous rendering
+      }
     }
     try {
       rq.render();
@@ -240,6 +255,41 @@ Offhand.tools = Offhand.tools || {};
       }
     }
     for (var k = 0; k < jobs.length; k += 1) syncJob(jobs[k], rq);
+    return false;
+  }
+
+  function outputForItem(item) {
+    try {
+      if (item.numOutputModules > 0 && item.outputModule(1).file) {
+        return item.outputModule(1).file.fsName;
+      }
+    } catch (error) {
+      return null;
+    }
+    return null;
+  }
+
+  // Jobs live in panel memory, but the render queue survives a panel reload.
+  // Adopt untracked queue items so start/jobs keep working after a reload.
+  function adoptQueueJobs(util, rq, queuedOnly) {
+    var added = 0;
+    for (var i = 1; i <= rq.numItems; i += 1) {
+      var item = rq.item(i);
+      var state = jobState(String(item.status));
+      if (queuedOnly && state !== "queued") continue;
+      var known = false;
+      for (var j = 0; j < Offhand.jobs.length; j += 1) {
+        if (Offhand.jobs[j].queueIndex === i) {
+          known = true;
+          break;
+        }
+      }
+      if (known) continue;
+      var adopted = recordJob(item.comp || null, outputForItem(item), i);
+      adopted.status = state as any;
+      added += 1;
+    }
+    return added;
   }
 
   function jobSummary(jobs) {
@@ -255,6 +305,7 @@ Offhand.tools = Offhand.tools || {};
 
     if (action === "status") {
       if (!rq) util.fail("INVALID_STATE", "No render queue available.");
+      adoptQueueJobs(util, rq, true);
       syncAll(rq);
       var statusOut = queueStatus(util, rq);
       statusOut.jobs = jobSummary(Offhand.jobs);
@@ -263,6 +314,7 @@ Offhand.tools = Offhand.tools || {};
 
     if (action === "jobs") {
       if (!rq) util.fail("INVALID_STATE", "No render queue available.");
+      adoptQueueJobs(util, rq, true);
       syncAll(rq);
       return { total: Offhand.jobs.length, jobs: jobSummary(Offhand.jobs), queue: queueStatus(util, rq) };
     }
@@ -276,12 +328,23 @@ Offhand.tools = Offhand.tools || {};
           "Re-run with confirm: true.",
         );
       }
+      if (rq.rendering) {
+        util.fail(
+          "INVALID_STATE",
+          "Cannot clear the render queue while it is rendering.",
+          'Wait for the render to finish, then call action="clear" again.',
+        );
+      }
       var count = rq.numItems;
       while (rq.numItems > 0) {
         rq.item(rq.numItems).remove();
       }
       for (var c = 0; c < Offhand.jobs.length; c += 1) {
-        if (Offhand.jobs[c].status === "queued") Offhand.jobs[c].status = "failed";
+        if (Offhand.jobs[c].status === "queued" || Offhand.jobs[c].status === "rendering") {
+          Offhand.jobs[c].status = "failed";
+          Offhand.jobs[c].error = "Render queue was cleared.";
+          Offhand.jobs[c].finishedAt = now();
+        }
       }
       return { cleared: true, removed: count };
     }
@@ -352,8 +415,9 @@ Offhand.tools = Offhand.tools || {};
       }
 
       var job = recordJob(targetComp, outputPath, queueIndexFor(util, rq, rqItem));
+      var scheduled = false;
       if (args.start === true) {
-        renderNow(util, rq, [job]);
+        scheduled = scheduleRender(util, rq, [job]);
       }
       var queuedOut: any = queueStatus(util, rq);
       queuedOut.job = jobInfo(job);
@@ -370,6 +434,15 @@ Offhand.tools = Offhand.tools || {};
           );
         }
       }
+      if (args.start === true) {
+        queuedOut.scheduled = scheduled;
+        queuedOut.blocking = !scheduled;
+        notes.push(
+          scheduled
+            ? 'Rendering is scheduled in After Effects; poll action="jobs" for completion.'
+            : "Rendering ran synchronously.",
+        );
+      }
       if (notes.length > 0) queuedOut.note = notes.join(" ");
       return queuedOut;
     }
@@ -383,11 +456,22 @@ Offhand.tools = Offhand.tools || {};
           'Call render with action="jobs" to see progress.',
         );
       }
+      adoptQueueJobs(util, rq, true);
       var pending: RenderJob[] = [];
       if (args.job !== undefined) {
         var picked = findJob(String(args.job));
         if (!picked) {
-          util.fail("NOT_FOUND", 'No render job "' + args.job + '".', 'Call render with action="jobs".');
+          util.fail(
+            "NOT_FOUND",
+            'No render job "' + args.job + '".',
+            'Call render with action="jobs". After a panel reload, omit job to start queued items.',
+          );
+        } else if (picked.status !== "queued") {
+          util.fail(
+            "INVALID_STATE",
+            'Render job "' + args.job + '" is ' + picked.status + ", not queued.",
+            'Call render with action="jobs" to see the current state.',
+          );
         } else {
           pending.push(picked);
         }
@@ -400,14 +484,18 @@ Offhand.tools = Offhand.tools || {};
         util.fail(
           "INVALID_STATE",
           "No queued render jobs.",
-          'Call render with action="queue" (and maybe comp/path) first.',
+          'Call render with action="queue" (and maybe comp/path) first, or action="jobs" to inspect the queue.',
         );
       }
-      renderNow(util, rq, pending);
-      var startedOut = queueStatus(util, rq);
+      var scheduled = scheduleRender(util, rq, pending);
+      var startedOut: any = queueStatus(util, rq);
       startedOut.started = true;
-      startedOut.blocking = true;
+      startedOut.scheduled = scheduled;
+      startedOut.blocking = !scheduled;
       startedOut.jobs = jobSummary(pending);
+      startedOut.note = scheduled
+        ? 'Rendering is scheduled in After Effects; poll action="jobs" for completion.'
+        : "Rendering ran synchronously.";
       return startedOut;
     }
 

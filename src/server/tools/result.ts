@@ -2,7 +2,8 @@ import { serializeError } from '../../shared/errors.js';
 import type { ToolTextResult } from './types.js';
 
 export function textResult(data: unknown): ToolTextResult {
-  const text = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+  const text =
+    typeof data === 'string' ? data : JSON.stringify(data === undefined ? null : data, null, 2) ?? 'null';
   return {
     content: [{ type: 'text', text }],
   };

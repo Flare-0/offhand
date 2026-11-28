@@ -81,6 +81,19 @@ describe("assets import", () => {
     expect(imported.parent).toBe("Footage");
   });
 
+  it("requires confirm to remove an item", () => {
+    const imported = run("assets", { action: "import", path: media("remove.png") });
+    const id = imported.data.imported[0].id;
+    const refused = run("assets", { action: "remove", item: id });
+    expect(refused.ok).toBe(false);
+    expect(refused.error.code).toBe("INVALID_ARGS");
+    const removed = run("assets", { action: "remove", item: id, confirm: true });
+    expect(removed.ok).toBe(true);
+    expect(removed.data.removed).toBe(true);
+    const after = run("assets", { action: "list" });
+    expect(after.data.items.some((item: any) => item.id === id)).toBe(false);
+  });
+
   it("replaces footage", () => {
     const first = media("first.png");
     const second = media("second.png");

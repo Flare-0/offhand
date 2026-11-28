@@ -50,8 +50,7 @@ Offhand.tools = Offhand.tools || {};
       if (comp.selectedLayers) {
         for (var i = 0; i < comp.selectedLayers.length; i += 1) {
           detail.selectedLayers.push({
-            id: comp.selectedLayers[i].id,
-            index: comp.selectedLayers[i].index,
+            uid: util.layerUid(comp.selectedLayers[i]),
             name: comp.selectedLayers[i].name,
           });
         }

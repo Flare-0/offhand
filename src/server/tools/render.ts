@@ -8,7 +8,7 @@ export const renderTool: ToolDefinition = {
   name: 'render',
   title: 'Render & Frame Preview',
   description:
-    'Save a single composition frame to PNG, queue a composition to the After Effects Render Queue, start a queued render job, inspect jobs and queue status, or clear the render queue. Always render MP4/H.264 unless the user explicitly asks for another format: pass output ending in .mp4 and the host applies the H.264 output-module template automatically. Rendering is synchronous: action=start blocks until After Effects finishes, so prefer queueing and checking jobs later.',
+    'Save a single composition frame to PNG, queue a composition to the After Effects Render Queue, start a queued render job, inspect jobs and queue status, or clear the render queue. Always render MP4/H.264 unless the user explicitly asks for another format: pass output ending in .mp4 and the host applies the H.264 output-module template automatically. action=start schedules the render and returns immediately; poll action=jobs for completion. Render jobs survive panel reloads because queued items are adopted from the render queue.',
   inputSchema: {
     action: z
       .enum(['frame', 'queue', 'start', 'jobs', 'status', 'clear'])
@@ -46,7 +46,7 @@ export const renderTool: ToolDefinition = {
     start: z
       .boolean()
       .optional()
-      .describe('Start rendering immediately after queuing (default false). Rendering blocks the call until AE finishes.'),
+      .describe('Start rendering immediately after queuing (default false). Returns after scheduling; poll action="jobs".'),
     job: z
       .string()
       .optional()

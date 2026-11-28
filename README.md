@@ -67,7 +67,7 @@ reinstalling. See [docs/install.md](docs/install.md) for the full walkthrough an
 
 ## Status
 
-`0.2.0` — a working end-to-end preview. **Phases A–E of the rewrite are complete and verified live on
+`0.3.0` - a working end-to-end preview. **Phases A-E of the rewrite are complete and verified live on
 AE 2023**: the panel hosts the bridge inside After Effects, the MCP server dials in, and the ExtendScript
 host is compiled from TypeScript to ES3. The full 15-tool surface has been exercised through the real
 MCP → WebSocket → panel → host chain.
@@ -75,15 +75,15 @@ MCP → WebSocket → panel → host chain.
 All 15 tools are implemented on both sides: `status`, `docs`, `project`, `comp`, `layer`, `property`,
 `effect`, `text`, `shape`, `mask`, `render`, `assets`, `view`, `batch`, and the `execute` escape hatch.
 
-Writes return a **diff** so you can see what moved, layers are addressed by **stable id** (`"#42"`),
-reads accept `detail: min|full`, `batch` packs up to 20 calls into one undo group, `render` records
-jobs, and `offhand patterns` turns repeated `execute` scripts into candidates for the typed surface.
+Writes return a **diff** so you can see what moved, layers are addressed by **stable uid** (`"L42"`),
+reads accept `detail: min|full`, `batch` packs up to 20 calls into one undo group, `render` schedules
+jobs and polls without blocking, and `offhand patterns` turns repeated `execute` scripts into candidates
+for the typed surface.
 
 Known gaps, tracked in [ROADMAP.md](ROADMAP.md):
 
-- `render start` blocks until After Effects finishes; no progress stream yet.
+- Long renders still occupy After Effects; `render jobs` polls between calls.
 - Mac is untested; the installer is Windows-only.
-- npm publish is Phase H.
 
 ## Why
 

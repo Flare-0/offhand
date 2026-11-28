@@ -3,6 +3,35 @@
 All notable changes to offhand. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions use [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-11-28
+
+Layers are identified by a stable uid, and renders no longer hold the bridge call open.
+
+### Changed
+
+- **Breaking: layer uids replace indexes and numeric layer ids.** Every layer row carries `uid: "L<id>"`
+  (and `parentUid`), and `layer` selectors accept a uid or name. `"L42"`, `"#42"`, `"id:42"`, `"uid:42"`
+  and a bare number all address the same uid; a numeric string is never a position. Layer indexes are
+  rejected because reordering silently changes them.
+- **`layer reorder` takes `before` or `after`** instead of a target index, and reports the new neighbor
+  uids. Duplicate and delete results report uids too.
+- **`render start` and `queue { start: true }` schedule rendering** through `app.scheduleTask` and return
+  immediately with `scheduled`/`blocking` fields. `render jobs` polls the queue; queued items are adopted
+  after a panel reload, so jobs are not lost when the panel restarts.
+- `render clear` refuses while a render is active and marks both queued and rendering jobs failed when it
+  does run.
+- Tool results can no longer emit `text: undefined` when a handler returns nothing.
+
+### Removed
+
+- Phase H (npm publish) is no longer planned; the MCP config uses the local `dist/cli.js` build.
+
+### Tests
+
+- 10 files / 96 tests, including uid selectors, reorder by neighbor, parent uids, render scheduling,
+  render-queue adoption after a reload, clear-while-rendering, property expressions/keyframe removal,
+  project save/open, and assets removal.
+
 ## [0.2.0] — 2026-11-28
 
 Phase E — the tool surface got agent-shaped: stable ids, honest diffs, batching, cheap reads, and a way

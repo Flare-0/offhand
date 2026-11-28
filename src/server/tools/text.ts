@@ -20,7 +20,7 @@ export const textTool: ToolDefinition = {
       .describe('Composition id or name. Defaults to the active composition.'),
     layer: selector
       .optional()
-      .describe('Text layer index or name for get/set. Defaults to the first selected layer.'),
+      .describe('Text layer uid ("L123") or name for get/set. Defaults to the first selected layer.'),
     name: z.string().optional().describe('Layer name.'),
     text: z.string().optional().describe('Text string content.'),
     font: z.string().optional().describe('PostScript font name, e.g. "Arial-BoldMT".'),

@@ -1,4 +1,4 @@
-﻿import { Offhand } from "../core/state";
+import { Offhand } from "../core/state";
 
 Offhand.tools = Offhand.tools || {};
 
@@ -110,8 +110,7 @@ Offhand.tools = Offhand.tools || {};
     }
     var contents = layer.property("ADBE Root Vectors Group");
     var info = {
-      id: layer.id,
-      index: layer.index,
+      uid: util.layerUid(layer),
       name: layer.name,
       position: util.readValue(layer.property("ADBE Transform Group").property("ADBE Position")),
       groups: contents ? contents.numProperties : 0,
@@ -194,7 +193,7 @@ Offhand.tools = Offhand.tools || {};
       applyShapeParams(util, layer, args);
       if (args.position !== undefined) setPosition(util, layer, args.position);
       var createdResult: any = readShapeInfo(util, layer);
-      createdResult.created = { id: layer.id, name: layer.name };
+      createdResult.created = { uid: util.layerUid(layer), name: layer.name };
       createdResult.changed = {};
       return createdResult;
     }

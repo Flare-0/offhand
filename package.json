@@ -1,6 +1,6 @@
 {
   "name": "offhand-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "MCP server for Adobe After Effects. Typed tools first, ExtendScript only when you ask for it.",
   "license": "MIT",
   "type": "module",

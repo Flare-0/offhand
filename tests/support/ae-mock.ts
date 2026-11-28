@@ -1014,6 +1014,8 @@ export type MockAe = {
   layer: MockLayer;
   renderQueue: MockRenderQueue;
   dispatch: (tool: string, args: Record<string, unknown>) => any;
+  /** Runs callbacks registered through app.scheduleTask (render uses this). */
+  runScheduled: () => void;
   reset: () => void;
 };
 
@@ -1028,11 +1030,15 @@ export function installAeMock(): MockAe {
   project.activeItem = comp;
   const layer = comp.layers.addSolid([1, 1, 1], "Solid 1", 1920, 1080, 1, 10);
   layer.selected = true;
+  const scheduledTasks: string[] = [];
 
   const globals: Record<string, unknown> = {
     app: {
       project,
       version: "23.6x62",
+      scheduleTask: (script: string) => {
+        scheduledTasks.push(String(script));
+      },
       effects: [
         { displayName: "Glow", matchName: "ADBE Glo2", category: "Stylize" },
         { displayName: "Gaussian Blur", matchName: "ADBE Gaussian Blur 2", category: "Blur & Sharpen" },
@@ -1076,6 +1082,7 @@ export function installAeMock(): MockAe {
     project.selection = [];
     project.renderQueue._items = [];
     project.renderQueue.rendering = false;
+    scheduledTasks.length = 0;
     const nextComp = project.items.addComp("Main", 1920, 1080, 1, 10, 30);
     project.activeItem = nextComp;
     const nextLayer = nextComp.layers.addSolid([1, 1, 1], "Solid 1", 1920, 1080, 1, 10);
@@ -1091,6 +1098,12 @@ export function installAeMock(): MockAe {
     renderQueue: project.renderQueue,
     dispatch: () => {
       throw new Error("dispatch not wired; import host and call dispatch directly");
+    },
+    runScheduled: () => {
+      const tasks = scheduledTasks.splice(0, scheduledTasks.length);
+      for (const script of tasks) {
+        if (script.indexOf("renderQueue.render") >= 0) project.renderQueue.render();
+      }
     },
     reset,
   };

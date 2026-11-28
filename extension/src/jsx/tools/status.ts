@@ -30,7 +30,7 @@ Offhand.tools.status = function () {
   if (comp && comp.selectedLayers) {
     for (var j = 0; j < comp.selectedLayers.length; j += 1) {
       var layer = comp.selectedLayers[j];
-      selection.layers.push({ index: layer.index, name: layer.name });
+      selection.layers.push({ uid: Offhand.util.layerUid(layer), name: layer.name });
     }
   }
 

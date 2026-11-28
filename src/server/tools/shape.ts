@@ -20,7 +20,7 @@ export const shapeTool: ToolDefinition = {
       .describe('Composition id or name. Defaults to the active composition.'),
     layer: selector
       .optional()
-      .describe('Shape layer index or name for get/set. Defaults to the first selected layer.'),
+      .describe('Shape layer uid ("L123") or name for get/set. Defaults to the first selected layer.'),
     name: z.string().optional().describe('Layer name.'),
     shape: z
       .enum(['rect', 'ellipse', 'star', 'polygon', 'path'])

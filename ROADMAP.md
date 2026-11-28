@@ -56,7 +56,7 @@ bridge architecture is being **flipped**. Everything in "Rewrite plan" below is 
    "AE may be blocked by a dialog". Slow operations (renders) return a `jobId` immediately and are
    polled via `render.status`, so they never hit the MCP client's timeout. Version handshake states
    mismatches explicitly with the fix.
-5. **Tool surface: push the 95% goal.** Stable layer IDs instead of indexes (indexes shift and cause
+5. **Tool surface: push the 95% goal.** Stable layer uids instead of indexes (indexes shift and cause
    silent wrong-layer edits). Every write returns the new state as a compact diff
    (`{changed: {position: [[0,0],[100,50]]}}`) so no follow-up `get` is needed. New **`batch`** tool:
    several operations, one round trip, one undo group, rollback on failure (a "lower third" is ~8 ops).
@@ -157,19 +157,20 @@ bridge architecture is being **flipped**. Everything in "Rewrite plan" below is 
         `extension/host/` tree stays in the repo (not deleted) as the fallback, per the phase-A rule.
 - [x] **E. Tool surface** — layer IDs, write diffs, `batch`, `detail`, render jobs, execute promotion.
       **Done and live-verified (2026-11-28, 0.2.0).**
-      - Stable layer ids: `layerInfo` carries `id`, every selector accepts `#42` / `id:42`, and
-        `findLayerById` fails with a `NOT_FOUND` + `layer action="list"` hint. Ids are the documented
-        default because they survive renames and reordering.
+      - Stable layer uids: `layerInfo` carries `uid: "L<id>"` and `parentUid`, every selector accepts
+        uid or name, and `findLayerById` fails with a `NOT_FOUND` + `layer action="list"` hint. Indexes
+        are rejected because they change on reorder.
       - Write diffs: `core/util.ts` gained `clone`/`same`/`diff`/`track`; `diff(before, after)` returns
         `{ field: { from, to } }` using the host's own JSON stringifier. Every write tool returns
         `changed`, creators return `created`, removals return `removed`, and no-op writes return a `note`.
-      - `detail: min|full` on `layer`, `comp`, `project`, `property`; `min` is a brief (ids + essentials)
+      - `detail: min|full` on `layer`, `comp`, `project`, `property`; `min` is a brief (uids + essentials)
         and `full` keeps the old verbose shape. `layer list` defaults to `layerBrief`.
       - `batch` (15th tool): up to 20 sequential typed calls, one undo group, no nesting,
         `stopOnError` default true, per-call `ms` and error. The panel's security gate scans
         `args.calls` for `execute`, so batching cannot bypass the raw-script switch.
       - Render jobs: `render` now has `queue`/`start`/`jobs`; jobs (`j1`, `j2`, …) live in
-        `Offhand.jobs` and are synced from the AE render queue. `start` is synchronous and says so.
+        `Offhand.jobs`, queued items are adopted after a panel reload, and `start` schedules the
+        render with `app.scheduleTask` before returning. `jobs` polls the queue.
       - Execute promotion: `log.ts` groups repeated `execute` reasons (`readExecutePatterns`,
         `suggestTool`) and `offhand patterns` prints counts, error codes and the candidate typed tool.
       - Tests: 10 files / 84 tests, including a mock After Effects object model that runs every typed
@@ -178,7 +179,6 @@ bridge architecture is being **flipped**. Everything in "Rewrite plan" below is 
       host landed during the Phase E live-fix round; the eval task set is still open.)
 - [ ] **G. Security/install** — `offhand install`, `offhand doctor --fix`, audit-log surfacing.
       (The raw-script toggle landed early, in Phase C.)
-- [ ] **H. Docs + live AE verification** — README, `docs/*`, smoke test in AE 2023, then npm publish.
 
 > **Phase D done 2026-11-25**: host ported into `src/jsx` (build green: 44 modules, jsx bundle
 > ~100 KB, handlers verified present). Root `typecheck`, 24 tests, `lint` green. Live reload of the
@@ -190,8 +190,8 @@ bridge architecture is being **flipped**. Everything in "Rewrite plan" below is 
 > render-job diffs; tests grew to 10 files / 84 tests with a mock AE host. Next up is Phase F
 > (the eval task set; the fake panel and mock AE model are already in place).
 > Note: `offhand-mcp` is **not on npm** (`npm view` → 404), so MCP clients must launch
-> `node D:/Projects/offhand/dist/cli.js` until Phase H publishes it. Restarting the client after a
-> rebuild is required — an MCP server keeps running the code it was started with.
+> `node D:/Projects/offhand/dist/cli.js`. Restarting the client after a rebuild is required - an MCP
+> server keeps running the code it was started with.
 
 > **bolt-cep reference:** `https://github.com/hyperbrew/bolt-cep` (branch `master`).
 > A shallow clone lives at `C:\Users\Muaj\AppData\Local\Temp\opencode\bolt-cep` while this work runs.
@@ -277,4 +277,3 @@ Currently minimal. Add entries for:
 ### Priority 4: Package & Repo Cleanup
 - Decide whether to commit or ignore the untracked `assets/*.svg` files.
 - Verify `npm pack` contents (`dist`, `extension`, `assets`, `docs`, `README.md`, `LICENSE`).
-- Publish to npm (`npm publish --access public`) when ready.

@@ -82,6 +82,17 @@ Offhand.tools = Offhand.tools || {};
     return util.layerBrief(layer);
   }
 
+  /** UIDs of the layers directly above and below, for reorder diffs. */
+  function neighbors(util, comp, layer) {
+    var at = layer.index;
+    var above = at > 1 ? comp.layer(at - 1) : null;
+    var below = at < comp.numLayers ? comp.layer(at + 1) : null;
+    return {
+      above: above ? util.layerUid(above) : null,
+      below: below ? util.layerUid(below) : null,
+    };
+  }
+
   /** Layer fields that `applyCommon` understands, in tool-facing names. */
   function touchedFields(args) {
     var fields = [];
@@ -112,7 +123,7 @@ Offhand.tools = Offhand.tools || {};
       if (fields[i] !== "parent") trackable.push(fields[i] === "blendMode" ? "blendingMode" : fields[i]);
     }
     var commit = util.track(layer, trackable);
-    var parentBefore = layer.parent ? layer.parent.name : null;
+    var parentBefore = layer.parent ? util.layerUid(layer.parent) : null;
 
     if (args.name !== undefined) layer.name = String(args.name);
     if (args.startTime !== undefined) layer.startTime = util.number(args.startTime, "startTime");
@@ -143,7 +154,7 @@ Offhand.tools = Offhand.tools || {};
         }
         layer.parent = parentLayer;
       }
-      var parentAfter = layer.parent ? layer.parent.name : null;
+      var parentAfter = layer.parent ? util.layerUid(layer.parent) : null;
       if (parentBefore !== parentAfter) {
         changed.parent = { from: parentBefore, to: parentAfter };
       }
@@ -265,7 +276,7 @@ Offhand.tools = Offhand.tools || {};
 
       var changed = applyCommon(util, targetComp, created, args);
       var result = info(util, created);
-      result.created = { id: created.id, name: created.name, type: type };
+      result.created = { uid: util.layerUid(created), name: created.name, type: type };
       if (countKeys(changed) > 0) result.changed = changed;
       return result;
     }
@@ -286,26 +297,40 @@ Offhand.tools = Offhand.tools || {};
     if (action === "duplicate") {
       var duplicateComp = util.comp(args.comp);
       var original = util.layer(duplicateComp, args.layer);
-      var originalId = original.id;
+      var originalUid = util.layerUid(original);
       var copy = original.duplicate();
       if (args.name !== undefined) copy.name = String(args.name);
       var copyResult = info(util, copy);
-      copyResult.created = { id: copy.id, name: copy.name, type: copyResult.type };
-      copyResult.changed = { duplicateOf: { from: originalId, to: copy.id } };
+      copyResult.created = { uid: util.layerUid(copy), name: copy.name, type: copyResult.type };
+      copyResult.changed = { duplicateOf: { from: originalUid, to: util.layerUid(copy) } };
       return copyResult;
     }
 
     if (action === "reorder") {
       var reorderComp = util.comp(args.comp);
       var moved = util.layer(reorderComp, args.layer);
-      var fromIndex = moved.index;
-      var index = util.number(args.index, "index");
-      if (index <= 1) moved.moveToBeginning();
-      else if (index >= reorderComp.numLayers) moved.moveToEnd();
-      else moved.moveBefore(reorderComp.layer(Math.round(index)));
+      var hasBefore = args.before !== undefined && args.before !== null && args.before !== "";
+      var hasAfter = args.after !== undefined && args.after !== null && args.after !== "";
+      if (hasBefore === hasAfter) {
+        util.fail(
+          "INVALID_ARGS",
+          'Pass exactly one of "before" or "after" for action="reorder".',
+          'Example: layer({ action:"reorder", layer:"L12", before:"L7" }).',
+        );
+      }
+      var target = util.layer(reorderComp, hasBefore ? args.before : args.after);
+      if (target === moved) {
+        util.fail("INVALID_ARGS", "A layer cannot be moved relative to itself.");
+      }
+      var fromNeighbors = neighbors(util, reorderComp, moved);
+      if (hasBefore) moved.moveBefore(target);
+      else moved.moveAfter(target);
       var movedInfo = info(util, moved);
-      movedInfo.changed = { index: { from: fromIndex, to: moved.index } };
-      movedInfo.hint = "Layer indices change after a reorder. Address layers by id (#id) to stay stable.";
+      movedInfo.changed = {
+        neighbors: { from: fromNeighbors, to: neighbors(util, reorderComp, moved) },
+      };
+      movedInfo.hint =
+        'Layer order changed. Use uid for stable addressing; names and order can change.';
       return movedInfo;
     }
 
@@ -320,11 +345,11 @@ Offhand.tools = Offhand.tools || {};
         );
       }
       var doomedName = doomed.name;
-      var doomedId = doomed.id;
+      var doomedUid = util.layerUid(doomed);
       doomed.remove();
       return {
         deleted: true,
-        removed: { id: doomedId, name: doomedName },
+        removed: { uid: doomedUid, name: doomedName },
         layers: deleteComp.numLayers,
       };
     }

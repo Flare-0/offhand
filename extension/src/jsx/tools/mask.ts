@@ -77,7 +77,7 @@ Offhand.tools = Offhand.tools || {};
           items.push(maskInfo(util, parade.property(i), i));
         }
       }
-      return { layer: layer.name, layerId: layer.id, items: items, total: parade ? parade.numProperties : 0 };
+      return { layer: layer.name, layerUid: util.layerUid(layer), items: items, total: parade ? parade.numProperties : 0 };
     }
 
     if (action === "get") {
@@ -96,7 +96,7 @@ Offhand.tools = Offhand.tools || {};
       }
       applyMaskProps(util, created, args);
       var createdResult = maskInfo(util, created, created.propertyIndex);
-      createdResult.layerId = layer.id;
+      createdResult.layerUid = util.layerUid(layer);
       createdResult.created = { name: created.name, index: created.propertyIndex };
       createdResult.changed = { masks: { from: countBefore, to: parade.numProperties } };
       return createdResult;
@@ -107,7 +107,7 @@ Offhand.tools = Offhand.tools || {};
       var before = maskInfo(util, target, target.propertyIndex);
       applyMaskProps(util, target, args);
       var setResult = maskInfo(util, target, target.propertyIndex);
-      setResult.layerId = layer.id;
+      setResult.layerUid = util.layerUid(layer);
       setResult.changed = util.diff(before, setResult);
       if (!setResult.changed.name && !setResult.changed.mode && !setResult.changed.inverted
         && !setResult.changed.feather && !setResult.changed.opacity && !setResult.changed.expansion
@@ -133,7 +133,7 @@ Offhand.tools = Offhand.tools || {};
       return {
         removed: { name: removedName, index: removedIndex },
         layer: layer.name,
-        layerId: layer.id,
+        layerUid: util.layerUid(layer),
         changed: { masks: { from: countBeforeRemove, to: parade.numProperties } },
       };
     }

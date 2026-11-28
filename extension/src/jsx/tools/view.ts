@@ -41,7 +41,7 @@ Offhand.tools = Offhand.tools || {};
       var selected = [];
       for (var k = 0; k < targets.length; k += 1) {
         targets[k].selected = true;
-        selected.push({ index: targets[k].index, name: targets[k].name });
+        selected.push({ uid: util.layerUid(targets[k]), name: targets[k].name });
       }
       comp.openInViewer();
       return { comp: comp.name, selected: selected };

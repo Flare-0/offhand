@@ -8,10 +8,10 @@ around the After Effects API.
 - **Read tools** default to a small result set and include a `limit`.
 - **Write tools** state that they mutate the project and run in one undo group.
 - **Errors** return `isError: true` with `[CODE] message` and a `Hint:` line.
-- **Ids** are numeric After Effects ids. Pass `"#42"` (or `"id:42"`) to address a layer by id;
-  names and 1-based indexes still work, but ids survive renames and reordering — prefer them.
+- **Layer uids** are stable `"L<id>"` strings such as `"L42"`. Address layers by uid or name; layer
+  indexes are not accepted because they change whenever layers are reordered. Prefer uids.
 - **Detail** — `layer`, `comp`, `project` and `property` accept `detail: "min" | "full"`. `min` is the
-  default and returns ids and the fields you need to decide; `full` returns everything.
+  default and returns uids and the fields you need to decide; `full` returns everything.
 - **Diffs** — write tools return a `changed` map so you can see what actually moved:
   `{ "position": { "from": [960, 540], "to": [960, 640] } }`. Empty means nothing changed; the
   response then carries a `note`.
@@ -31,7 +31,7 @@ Returns:
 ```json
 {
   "connected": true,
-  "bridge": { "panelVersion": "0.2.0", "connectedAt": "…" },
+  "bridge": { "panelVersion": "0.3.0", "connectedAt": "…" },
   "afterEffects": {
     "version": "23.6.0",
     "project": { "name": "Untitled", "path": null, "dirty": false, "items": 4 },
@@ -45,7 +45,7 @@ Returns:
       "time": 1.5,
       "layers": 6
     },
-    "selection": { "items": [], "layers": [{ "index": 2, "name": "Title" }] }
+    "selection": { "items": [], "layers": [{ "uid": "L42", "name": "Title" }] }
   }
 }
 ```
@@ -117,15 +117,17 @@ automatically run inside one After Effects undo group.
 ```json
 { "action": "list", "comp": "Main", "limit": 50 }
 { "action": "list", "comp": "Main", "detail": "full" }
-{ "action": "get", "comp": "Main", "layer": "#42" }
+{ "action": "get", "comp": "Main", "layer": "L42" }
 { "action": "create", "comp": "Main", "type": "text", "name": "Title" }
 { "action": "create", "comp": "Main", "type": "solid", "name": "BG", "color": "#0f000d", "width": 1920, "height": 1080 }
-{ "action": "set", "comp": "Main", "layer": "#42", "inPoint": 0, "outPoint": 5 }
-{ "action": "delete", "comp": "Main", "layer": "#42", "confirm": true }
+{ "action": "set", "comp": "Main", "layer": "L42", "inPoint": 0, "outPoint": 5 }
+{ "action": "reorder", "comp": "Main", "layer": "L42", "before": "L7" }
+{ "action": "delete", "comp": "Main", "layer": "L42", "confirm": true }
 ```
 
-`list` defaults to `min` (`id`, `index`, `name`, `type`, `enabled`, `locked`, `selected`). `get` returns
-the full snapshot of one layer including transform, effect count and mask count.
+`list` defaults to `min` (`uid`, `name`, `type`, `enabled`, `locked`, `selected`). `get` returns
+the full snapshot of one layer including transform, effect count and mask count. `reorder` takes exactly
+one of `before` or `after` and reports the new neighbor uids.
 
 ### `property`
 

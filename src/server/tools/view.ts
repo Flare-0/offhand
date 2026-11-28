@@ -23,7 +23,7 @@ export const viewTool: ToolDefinition = {
       .describe('Playhead time in seconds for action="time".'),
     layer: selector
       .optional()
-      .describe('Layer index or name to select for action="select".'),
+      .describe('Layer uid ("L123") or name to select for action="select".'),
     layers: z
       .array(selector)
       .optional()

@@ -211,6 +211,10 @@ Offhand.util =
       fail("INVALID_ARGS", "comp must be a composition id or name.");
     }
 
+    function layerUid(layer) {
+      return "L" + layer.id;
+    }
+
     function findLayerById(comp, id) {
       for (var i = 1; i <= comp.numLayers; i += 1) {
         var candidate = comp.layer(i);
@@ -218,15 +222,38 @@ Offhand.util =
       }
       fail(
         "NOT_FOUND",
-        'No layer with id ' + id + ' in "' + comp.name + '".',
-        'Call layer with action="list" to see current layer ids.',
+        'No layer with uid "L' + id + '" in "' + comp.name + '".',
+        'Call layer with action="list" and use the uid field. UIDs stay stable when layers move.',
       );
+    }
+
+    function layerUidNumber(selector) {
+      if (typeof selector === "number") {
+        return selector >= 1 && selector === Math.floor(selector) ? selector : null;
+      }
+      if (typeof selector !== "string") return null;
+      var text = selector.replace(/^\s+|\s+$/g, "");
+      var match = /^(?:#|id:|uid:|L)(\d+)$/i.exec(text);
+      if (match) return parseInt(match[1], 10);
+      return null;
+    }
+
+    function findLayerByName(comp, name) {
+      var exact = null;
+      var match = null;
+      var lower = name.toLowerCase();
+      for (var i = 1; i <= comp.numLayers; i += 1) {
+        var candidate = comp.layer(i);
+        if (candidate.name === name && exact === null) exact = candidate;
+        if (!match && candidate.name.toLowerCase() === lower) match = candidate;
+      }
+      return exact || match;
     }
 
     function findLayer(comp, selector) {
       if (selector && typeof selector === "object") {
-        if (typeof selector.id === "number") return findLayerById(comp, selector.id);
-        if (typeof selector.index === "number") return findLayer(comp, selector.index);
+        if (typeof selector.uid === "number") return findLayerById(comp, selector.uid);
+        if (typeof selector.uid === "string") return findLayer(comp, selector.uid);
         if (typeof selector.name === "string") return findLayer(comp, selector.name);
       }
 
@@ -235,37 +262,28 @@ Offhand.util =
         fail(
           "INVALID_ARGS",
           "No layer selected.",
-          'Pass layer as an index or name. Call layer with action="list" to list layers.',
+          'Pass layer as a uid ("L12") or name. Call layer with action="list" to list layers.',
         );
       }
 
-      if (typeof selector === "number") {
-        if (selector < 1 || selector > comp.numLayers) {
-          fail(
-            "NOT_FOUND",
-            "Layer index " + selector + " is out of range (1â€“" + comp.numLayers + ").",
-            'Call layer with action="list".',
-          );
-        }
-        return comp.layer(selector);
-      }
+      var uid = layerUidNumber(selector);
+      if (uid !== null) return findLayerById(comp, uid);
 
       if (typeof selector === "string") {
-        var idMatch = /^#(\d+)$/.exec(selector) || /^id:\s*(\d+)$/i.exec(selector);
-        if (idMatch) return findLayerById(comp, parseInt(idMatch[1], 10));
-
-        var match = null;
-        var lower = selector.toLowerCase();
-        for (var i = 1; i <= comp.numLayers; i += 1) {
-          var layer = comp.layer(i);
-          if (layer.name === selector) return layer;
-          if (!match && layer.name.toLowerCase() === lower) match = layer;
-        }
+        var text = selector.replace(/^\s+|\s+$/g, "");
+        var match = findLayerByName(comp, text);
         if (match) return match;
-        fail("NOT_FOUND", 'No layer named "' + selector + '".', 'Call layer with action="list".');
+        // A bare number is a uid too, but names win when a layer actually has
+        // that name. Prefixed forms (L12, #12, id:12, uid:12) always mean uid.
+        if (/^\d+$/.test(text)) return findLayerById(comp, parseInt(text, 10));
+        fail(
+          "NOT_FOUND",
+          'No layer with uid or name "' + selector + '".',
+          'Call layer with action="list" and use the uid field (for example "L12").',
+        );
       }
 
-      fail("INVALID_ARGS", "layer must be a layer index or name.");
+      fail("INVALID_ARGS", 'layer must be a uid ("L12") or name.');
     }
 
     function time(args, comp) {
@@ -404,9 +422,9 @@ Offhand.util =
     }
 
     function layerInfo(layer) {
+      var parent = layer.parent || null;
       var info = {
-        id: layer.id,
-        index: layer.index,
+        uid: layerUid(layer),
         name: layer.name,
         type: layerType(layer),
         enabled: layer.enabled,
@@ -417,7 +435,8 @@ Offhand.util =
         outPoint: round(layer.outPoint, 3),
         startTime: round(layer.startTime, 3),
         stretch: round(layer.stretch, 3),
-        parent: layer.parent ? layer.parent.name : null,
+        parent: parent ? parent.name : null,
+        parentUid: parent ? layerUid(parent) : null,
         label: layer.label,
         comment: layer.comment || "",
       };
@@ -445,8 +464,7 @@ Offhand.util =
     /** Compact row for `detail="min"` layer listings. */
     function layerBrief(layer) {
       return {
-        id: layer.id,
-        index: layer.index,
+        uid: layerUid(layer),
         name: layer.name,
         type: layerType(layer),
         enabled: layer.enabled,
@@ -797,7 +815,7 @@ Offhand.util =
 
       if (type === "layer") {
         var targetLayer = prop.value;
-        return targetLayer ? { index: targetLayer.index, name: targetLayer.name } : null;
+        return targetLayer ? { uid: layerUid(targetLayer), name: targetLayer.name } : null;
       }
 
       if (type === "mask") {
@@ -1074,6 +1092,7 @@ Offhand.util =
       project: project,
       comp: findComp,
       layer: findLayer,
+      layerUid: layerUid,
       time: time,
       color: color,
       rgbHex: rgbHex,

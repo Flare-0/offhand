@@ -5,7 +5,7 @@ import type { ToolDefinition } from './types.js';
 const detailSchema = z
   .enum(['min', 'full'])
   .optional()
-  .describe('Response detail: min (ids and essentials, default) or full (every field).');
+  .describe('Response detail: min (uids and essentials, default) or full (every field).');
 
 const selector = z.union([z.number(), z.string()]);
 const colorSchema = z.union([z.string(), z.array(z.number()).min(3).max(4)]);
@@ -14,7 +14,7 @@ export const layerTool: ToolDefinition = {
   name: 'layer',
   title: 'Layer',
   description:
-    'List, inspect, create, update, duplicate, reorder, or delete layers in a composition. Deleting requires confirm: true. Layers are addressed by 1-based index, name, or stable id (#123 from layer list/get); writes return a changed map of {field: {from, to}}.',
+    'List, inspect, create, update, duplicate, reorder, or delete layers in a composition. Deleting requires confirm: true. Layers are addressed by uid ("L123" from layer list/get) or name; uids stay stable when layers are reordered, while names and positions can change. Writes return a changed map of {field: {from, to}}.',
   inputSchema: {
     action: z
       .enum(['list', 'get', 'create', 'set', 'duplicate', 'reorder', 'delete'])
@@ -26,7 +26,7 @@ export const layerTool: ToolDefinition = {
       .describe('Composition id or name. Defaults to the active composition.'),
     layer: selector
       .optional()
-      .describe('Layer index (1-based), name, or stable id ("#123" or "id:123"). Defaults to the first selected layer.'),
+      .describe('Layer uid ("L123"), name, or a bare number treated as a uid. Defaults to the first selected layer.'),
     type: z
       .enum(['text', 'solid', 'null', 'shape', 'camera', 'light', 'comp', 'footage'])
       .optional()
@@ -53,8 +53,9 @@ export const layerTool: ToolDefinition = {
     label: z.number().int().min(0).max(16).optional().describe('Layer label color index (0–16).'),
     comment: z.string().optional().describe('Layer comment.'),
     blendMode: z.union([z.string(), z.number()]).optional().describe('Blending mode name (e.g. "normal", "multiply", "screen").'),
-    parent: z.union([selector, z.null()]).optional().describe('Parent layer index/name, or null to unparent.'),
-    index: z.number().int().min(1).optional().describe('Target 1-based layer index for action="reorder".'),
+    parent: z.union([selector, z.null()]).optional().describe('Parent layer uid or name, or null to unparent.'),
+    before: selector.optional().describe('For action="reorder": move the layer directly before this uid or name.'),
+    after: selector.optional().describe('For action="reorder": move the layer directly after this uid or name.'),
     confirm: z.boolean().optional().describe('Required true for action="delete".'),
     limit: z.number().int().min(1).max(200).optional().describe('Maximum layers for action="list".'),
     offset: z.number().int().min(0).optional().describe('Pagination offset for action="list".'),

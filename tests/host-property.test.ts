@@ -104,6 +104,57 @@ describe("property set", () => {
     expect(position().keyValue(1)).toEqual([50, 60, 0]);
   });
 
+  it("lists and gets properties", () => {
+    const listed = run("property", { action: "list", layer: "Solid 1" });
+    expect(listed.ok).toBe(true);
+    expect(Array.isArray(listed.data.items)).toBe(true);
+    const got = run("property", {
+      action: "get",
+      layer: "Solid 1",
+      path: "transform.position",
+    });
+    expect(got.ok).toBe(true);
+    expect(got.data.value).toEqual([960, 540, 0]);
+  });
+
+  it("sets and clears an expression", () => {
+    const set = run("property", {
+      action: "expression",
+      layer: "Solid 1",
+      path: "transform.opacity",
+      expression: "50",
+    });
+    expect(set.ok).toBe(true);
+    expect(set.data.changed.expression.to).toBe("50");
+    const cleared = run("property", {
+      action: "expression",
+      layer: "Solid 1",
+      path: "transform.opacity",
+      expression: "",
+    });
+    expect(cleared.ok).toBe(true);
+    expect(cleared.data.changed.expression.to).toBe("");
+  });
+
+  it("removes a keyframe", () => {
+    run("property", {
+      action: "keyframe",
+      layer: "Solid 1",
+      path: "transform.position",
+      time: 1,
+      value: [50, 60],
+    });
+    const removed = run("property", {
+      action: "removeKeyframe",
+      layer: "Solid 1",
+      path: "transform.position",
+      time: 1,
+    });
+    expect(removed.ok).toBe(true);
+    expect(removed.data.changed.keyframes.to).toBe(0);
+    expect(removed.data.changed).not.toHaveProperty("value");
+  });
+
   it("fails loudly instead of reporting a no-op write", () => {
     const prop: any = position();
     let written: any = null;

@@ -127,7 +127,7 @@ Offhand.tools = Offhand.tools || {};
       }
       return {
         layer: layer.name,
-        layerId: layer.id,
+        layerUid: util.layerUid(layer),
         path: args.path || "",
         items: items,
         total: group.numProperties || 0,
@@ -147,7 +147,7 @@ Offhand.tools = Offhand.tools || {};
     if (action === "get") {
       var info = util.propertyInfo(prop, args.detail === "min" ? false : args.includeKeys !== false);
       info.layer = layer.name;
-      info.layerId = layer.id;
+      info.layerUid = util.layerUid(layer);
       info.path = args.path;
       return info;
     }
@@ -168,7 +168,7 @@ Offhand.tools = Offhand.tools || {};
       verifyApplied(util, prop, valueBefore, valueAfter, numericValue(args.value), args, coerced);
       var setResult = util.propertyInfo(prop, false);
       setResult.layer = layer.name;
-      setResult.layerId = layer.id;
+      setResult.layerUid = util.layerUid(layer);
       setResult.path = args.path;
       setResult.changed = { value: { from: valueBefore, to: valueAfter } };
       if ((prop.numKeys || 0) !== keysBefore) {
@@ -191,7 +191,7 @@ Offhand.tools = Offhand.tools || {};
       }
       var keyResult = util.propertyInfo(prop, true);
       keyResult.layer = layer.name;
-      keyResult.layerId = layer.id;
+      keyResult.layerUid = util.layerUid(layer);
       keyResult.path = args.path;
       keyResult.keyIndex = keyIndex;
       keyResult.changed = {};
@@ -222,7 +222,7 @@ Offhand.tools = Offhand.tools || {};
       prop.removeKey(index);
       var remResult = util.propertyInfo(prop, true);
       remResult.layer = layer.name;
-      remResult.layerId = layer.id;
+      remResult.layerUid = util.layerUid(layer);
       remResult.path = args.path;
       remResult.changed = {
         keyframes: { from: keyCountBefore, to: prop.numKeys || 0 },
@@ -253,7 +253,7 @@ Offhand.tools = Offhand.tools || {};
       }
       var exprResult = util.propertyInfo(prop, false);
       exprResult.layer = layer.name;
-      exprResult.layerId = layer.id;
+      exprResult.layerUid = util.layerUid(layer);
       exprResult.path = args.path;
       exprResult.changed = {
         expression: { from: expressionBefore, to: prop.expression || "" },

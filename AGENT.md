@@ -163,8 +163,7 @@ loads the bundle once, so rebuild + reload the panel (flyout menu) or restart AE
 still called through `evalTS`; undo groups preserved).
 
 **Important:** `offhand-mcp` is **not published** (`npm view offhand-mcp version` → 404). MCP clients
-must run `node D:/Projects/offhand/dist/cli.js`. The panel's "Copy MCP config" button still emits the
-`npx -y offhand-mcp` form for after Phase H. Also: after rebuilding `dist/cli.js`, the MCP client must
+must run `node D:/Projects/offhand/dist/cli.js`. Also: after rebuilding `dist/cli.js`, the MCP client must
 be restarted (in OpenCode, remove + re-add the server entry) — it keeps running the old code otherwise.
 
 ### ✅ Phase D done (2026-11-25) — host ported into `src/jsx`
@@ -201,9 +200,10 @@ its flyout menu (or restart AE) before trusting the ported handlers in AE.
 The tools now behave like an agent surface rather than API wrappers. All of this is on **both** sides
 (host handler + server schema) and covered by tests.
 
-- **Stable ids.** `layerInfo` includes `id`; `layerBrief` is `{id,index,name,type,enabled,locked,selected}`.
-  `findLayer` accepts `number | string | {id}` and strings `#42` / `id:42`; `findLayerById` fails
-  `NOT_FOUND` with a `layer action="list"` hint. Documented default: address by id.
+- **Stable uids.** `layerInfo` carries `uid: "L<id>"` and `parentUid`; `layerBrief` is
+  `{uid,name,type,enabled,locked,selected}`. `findLayer` accepts `uid | name` (and `L42`, `#42`,
+  `id:42`, `uid:42`, or a bare number as the uid); indexes are not accepted. `findLayerById` fails
+  `NOT_FOUND` with a `layer action="list"` hint. Documented default: address by uid.
 - **Diffs.** `core/util.ts` has `clone`, `same` (via `Offhand.json.stringify`), `diff(before,after)`
   → `{field:{from,to}}`, and `track(target, fields)` which snapshots then commits. Write tools return
   `changed`; `create` returns `created`; `delete`/`remove` return `removed`; no-op writes return
@@ -442,7 +442,7 @@ The exact input shapes for the planned tools are already specified. See [`docs/t
 
 Key conventions (from `docs/tools.md`):
 - `comp` parameter accepts name (string) or id (number); default = active comp
-- `layer` parameter accepts name (string) or index (number); default = selected layer
+- `layer` parameter accepts a uid (`"L42"`) or name; default = selected layer. Indexes are rejected.
 - Times are **seconds** (not frames)
 - Colors accept `"#rrggbb"` or `[r, g, b]` in 0–255 or 0–1
 - All write tools run inside `app.beginUndoGroup("offhand: <name>")` (handled by dispatcher)
@@ -529,5 +529,3 @@ Phases A–E are done and live-verified; the live plan is in [`ROADMAP.md`](ROAD
    `tests/support/ae-mock.ts`). Add the 10–20 task eval set and use it to measure success rate, tool
    calls, tokens and `execute` usage.
 2. **Phase G — install/doctor** — `offhand install`, `offhand doctor --fix`, audit-log surfacing.
-3. **Phase H — docs + npm publish** — then switch the MCP config from
-   `node D:/Projects/offhand/dist/cli.js` to `npx -y offhand-mcp`.

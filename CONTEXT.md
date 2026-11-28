@@ -72,13 +72,14 @@ Target: **After Effects 2023+** (`AEFT [23.0,99.9]`). Windows only in practice; 
   returns a `changed` map (`{field:{from,to}}`), creators return `created`, removals `removed`, and no-op
   writes return a `note` instead of a silent success. Reads default to `detail: "min"` and keep `"full"` as
   an explicit opt-in.
-- **Layers are addressed by stable id** (`"#42"` / `"id:42"`), because names and indexes drift when a
-  user renames or reorders. `findLayer` still accepts both for convenience.
+- **Layers are addressed by stable uid** (`"L42"`), because names and indexes drift when a user
+  renames or reorders. `findLayer` accepts uid or name; indexes are rejected.
 - **`batch` exists to cut round trips, not to expand power.** It runs at most 20 handler calls, cannot
   nest, shares one undo group, and the panel's security gate scans the call list for `execute` — so the
   raw-script switch cannot be bypassed by packing it into a batch.
-- **Render jobs are honest about the limitation:** `render queue` records a job, `jobs` reports state, but
-  `start` calls the blocking `rq.render()` because ExtendScript cannot render in the background.
+- **Render jobs survive panel reloads:** `render queue` records a job, `start` schedules
+  `rq.render()` through `app.scheduleTask` and returns, queued items are adopted from the render queue,
+  and `jobs` reports state. Long renders still occupy AE once the scheduled task begins.
 - **The typed surface grows from evidence:** `offhand patterns` groups repeated `execute` reasons from
   `usage.jsonl` and suggests the tool that should absorb them.
 
@@ -130,12 +131,11 @@ without After Effects.
 
 ### Known gaps
 
-- `render start` blocks the panel until AE finishes; there is no progress stream.
+- A long render occupies After Effects while it runs; there is no progress stream or cancel action.
 - A `batch` that fails midway leaves earlier calls applied (one undo group, so one Ctrl+Z reverts them).
-- `render start` is the only way to render; there is no cancel action.
 - The legacy `extension/host` tree and its `dist/cep/host` copy remain as a fallback; the bundled
   `src/jsx` host answers first, but the fallback should be removed once it has been unused for a while.
-- macOS untested. npm publish is Phase H.
+- macOS untested.
 - Stale remote branch `docs/context-ruleset-note` (merged in #9) still exists; remove it only with the user's
   consent, since that is a delete command.
 - CI annotates a Node 20 deprecation because `actions/checkout@v4` targets Node 20 on a Node 24 runner —
@@ -148,7 +148,6 @@ without After Effects.
 1. **Phase F — testability** — the fake panel and mock AE host are done; add the 10–20 task eval set and
    use it to measure success rate, tool calls, tokens and `execute` usage.
 2. Phase G — `offhand install`, `offhand doctor --fix`, audit-log surfacing.
-3. Phase H — docs + npm publish.
 
 ---
 
