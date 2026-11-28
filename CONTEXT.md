@@ -119,7 +119,8 @@ without After Effects.
 
 ### Release 1.0.0 — shipped
 
-- Tag `v1.0.0` and GitHub Release with `offhand-panel-1.0.0.zip`.
+- Tag `v1.0.0` and GitHub Release <https://github.com/Flare-0/offhand/releases/tag/v1.0.0>
+  with `offhand-panel-1.0.0.zip` (512,558 bytes).
 - Panel is header + collapsible **Debug** + **Status** + **Log**, using the same dark palette; section
   labels are sentence case in the UI font.
 - The MCP hello reports `clientPath`; Copy MCP config emits `node <path>/dist/cli.js` (the old npx
