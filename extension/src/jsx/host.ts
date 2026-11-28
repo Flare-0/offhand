@@ -71,16 +71,27 @@ export const dispatch = (tool: string, argsJson: string): string => {
     const data = handler(args);
     return Offhand.json.stringify({ ok: true, data: data });
   } catch (error) {
-    const payload =
-      error && (error as { offhand?: unknown }).offhand
-        ? (error as { offhand: unknown }).offhand
-        : {
-            code: "HOST_ERROR",
-            message:
-              error && (error as Error).message
-                ? String((error as Error).message)
-                : String(error),
-          };
+    let payload: unknown;
+    if (error && (error as { offhand?: unknown }).offhand) {
+      payload = (error as { offhand: unknown }).offhand;
+    } else {
+      const details = error as
+        | { message?: unknown; line?: unknown; fileName?: unknown }
+        | null;
+      payload = {
+        code: "HOST_ERROR",
+        message: details && details.message ? String(details.message) : String(error),
+      };
+      // ExtendScript reports the failing line; keep it so host bugs are
+      // traceable to the compiled bundle instead of a message alone.
+      if (details && details.line) {
+        (payload as { hint: string }).hint =
+          "ExtendScript error at line " +
+          String(details.line) +
+          (details.fileName ? " (" + String(details.fileName) + ")" : "") +
+          ".";
+      }
+    }
     return Offhand.json.stringify({ ok: false, error: payload });
   } finally {
     if (grouped) {

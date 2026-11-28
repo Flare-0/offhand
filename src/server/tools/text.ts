@@ -36,9 +36,6 @@ export const textTool: ToolDefinition = {
       .enum(['left', 'center', 'right', 'justify'])
       .optional()
       .describe('Paragraph justification.'),
-    fauxBold: z.boolean().optional().describe('Enable faux bold.'),
-    fauxItalic: z.boolean().optional().describe('Enable faux italic.'),
-    allCaps: z.boolean().optional().describe('Enable all caps.'),
     position: z
       .array(z.number())
       .min(2)

@@ -15,10 +15,11 @@ export const assetsTool: ToolDefinition = {
       .default('list')
       .describe('Operation to perform.'),
     paths: z
-      .array(z.string().min(1))
-      .min(1)
+      .union([z.string().min(1), z.array(z.string().min(1)).min(1)])
       .optional()
-      .describe('File paths to import for action="import".'),
+      .describe(
+        'File paths to import for action="import": one path or an array of paths.',
+      ),
     path: z
       .string()
       .min(1)

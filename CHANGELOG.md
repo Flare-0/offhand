@@ -3,7 +3,7 @@
 All notable changes to offhand. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions use [Semantic Versioning](https://semver.org/).
 
-## [0.2.0] — 2026-11-26
+## [0.2.0] — 2026-11-28
 
 Phase E — the tool surface got agent-shaped: stable ids, honest diffs, batching, cheap reads, and a way
 to find out which raw scripts deserve a typed tool.
@@ -26,22 +26,49 @@ to find out which raw scripts deserve a typed tool.
 - **`offhand patterns`** — reads `usage.jsonl`, groups repeated `execute` calls by reason, counts their
   error codes and suggests which typed tool should absorb each one. Documented in
   [docs/tools.md](docs/tools.md#promotion-turning-execute-into-a-typed-tool).
-- **Tests:** 6 files / 29 tests, including the new `patterns` suite and schema coverage for `batch`,
-  `detail` and the render job actions.
+- **Tests:** 10 files / 84 tests, including a mock After Effects host that runs every typed tool
+  end to end.
 
 ### Changed
 
+- **Renders default to MP4/H.264.** When a queued output ends in `.mp4` and no `outputModule` is
+  passed, the host applies the installed H.264 output-module template automatically. Other formats
+  still work when asked for explicitly.
 - `project items`, `project comps`, `comp list`, `layer list` and `property list` default to compact
   briefs. Ask for `detail: "full"` when you need every field.
 - The tool-handler test now verifies `extension/src/jsx/tools/<name>.ts` (the TypeScript host) instead of
   the frozen legacy `.jsx` tree.
 - Versions bumped to 0.2.0 across the server, the panel and the host.
 
+### Fixed
+
+- Text layers no longer crash when a fill or stroke color is not applied; each color is read
+  defensively.
+- 2D/3D vector properties (`PropertyValueType.TwoD`/`ThreeD`) read as arrays instead of
+  `"300,200"`-style strings, fixing shape size, mask feather and similar values.
+- Vector-size properties that report no enum type in some AE builds (ellipse/rect `Size`, layer
+  `Scale`) also read as numeric arrays instead of strings.
+- `text set` assigns the `ParagraphJustification` enum constant, so `justification` no longer
+  fails with "The enum is of the incorrect type" on newer builds.
+- `text set` no longer offers `fauxBold`, `fauxItalic`, or `allCaps`: AE exposes them read-only.
+  Passing them now returns a clear `INVALID_ARGS` hint instead of a raw host error.
+- `text set` no longer reports "No values changed." when only non-text fields (justification,
+  colors, tracking, and so on) changed.
+- `property set` verifies the write by reading the property back. A silent no-op now fails with
+  `INVALID_STATE` and a hint instead of reporting success.
+- `assets import` accepts `path` or `paths`, a single string or an array, including JSON-encoded
+  arrays, and never passes `undefined` into the file resolver.
+- Render-queue labels come from AE's runtime `RQItemStatus` constants instead of a hardcoded table,
+  so `QUEUED`, `NEEDS_OUTPUT`, `DONE` and friends match the installed AE version.
+- Render job bookkeeping clears stale `finishedAt`, `ms` and `error` fields between runs.
+- `comp get` returns the compact brief by default.
+- Shape read-back now includes `id`, `created` and `changed`.
+
 ### Known limitations
 
 - `render start` blocks the panel until After Effects finishes; there is no progress stream yet.
 - `batch` is all-or-nothing only up to the failing call — earlier calls stay applied inside the undo group.
-- Live smoke tests still cover `status`, `project` and `comp`; the rest share the same call path.
+- The mock host cannot reproduce every After Effects quirk; API edge cases still need a live check.
 
 ## [0.1.0] — 2026-11-25
 

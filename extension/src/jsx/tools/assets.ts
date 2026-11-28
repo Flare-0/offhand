@@ -54,9 +54,56 @@ Offhand.tools = Offhand.tools || {};
     }
 
     if (action === "import") {
-      var list = args.paths ? args.paths : args.path ? [args.path] : null;
-      if (!list || !(list instanceof Array) || list.length === 0) {
-        util.fail("INVALID_ARGS", "paths or path is required for action=\"import\".");
+      // Accept paths as an array, one path, or a JSON-encoded array. Some MCP
+      // clients stringify array arguments, and an empty paths must still fall
+      // back to path instead of reaching fileFor(undefined).
+      //
+      // Do not use `instanceof` or compare against undefined/null here:
+      // ExtendScript throws "undefined is not an object" for `instanceof` on
+      // those values, which made `path`-only imports fail before the handler
+      // could read the fallback.
+      function isList(candidate) {
+        return (
+          typeof candidate === "object" &&
+          candidate !== null &&
+          typeof candidate.length === "number" &&
+          typeof candidate.push === "function"
+        );
+      }
+      var raw = args.paths;
+      var hasPaths =
+        typeof raw === "string" ? raw.length > 0 : isList(raw) && raw.length > 0;
+      if (!hasPaths && typeof args.path === "string" && args.path.length > 0) {
+        raw = args.path;
+      }
+      if (typeof raw === "string") {
+        var trimmed = raw.replace(/^\s+|\s+$/g, "");
+        if (trimmed.charAt(0) === "[") {
+          try {
+            raw = Offhand.json.parse(trimmed);
+          } catch (parseError) {
+            raw = trimmed;
+          }
+        } else {
+          raw = trimmed;
+        }
+      }
+      var list = [];
+      if (isList(raw)) {
+        for (var p = 0; p < raw.length; p += 1) {
+          if (raw[p] !== undefined && raw[p] !== null && String(raw[p]).length > 0) {
+            list.push(String(raw[p]));
+          }
+        }
+      } else if (typeof raw === "string" && raw.length > 0) {
+        list.push(raw);
+      }
+      if (list.length === 0) {
+        util.fail(
+          "INVALID_ARGS",
+          "paths or path is required for action=\"import\".",
+          "Pass one absolute path or an array of paths.",
+        );
       }
       var destFolder = null;
       if (args.folder !== undefined) {

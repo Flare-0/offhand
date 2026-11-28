@@ -89,7 +89,18 @@ Offhand.tools = Offhand.tools || {};
       shapeProp.setValue(util.shapeFromPoints(args.points, args.closed));
     }
 
-    var targetGroup = util.firstWithMatchName(contents, ["ADBE Vector Group"]) || contents;
+    // In AE a vector group holds its contents in "ADBE Vectors Group"; Fill and
+    // Stroke can only be added there, not on the group itself.
+    var group = util.firstWithMatchName(contents, ["ADBE Vector Group"]);
+    var targetGroup = contents;
+    if (group) {
+      try {
+        var vectors = group.property("ADBE Vectors Group");
+        if (vectors) targetGroup = vectors;
+      } catch (vectorsError) {
+        targetGroup = contents;
+      }
+    }
     applyFillAndStroke(util, targetGroup, args);
   }
 
@@ -99,6 +110,7 @@ Offhand.tools = Offhand.tools || {};
     }
     var contents = layer.property("ADBE Root Vectors Group");
     var info = {
+      id: layer.id,
       index: layer.index,
       name: layer.name,
       position: util.readValue(layer.property("ADBE Transform Group").property("ADBE Position")),
@@ -135,6 +147,13 @@ Offhand.tools = Offhand.tools || {};
     }
 
     return info;
+  }
+
+  function isEmpty(object) {
+    for (var key in object) {
+      if (object.hasOwnProperty(key)) return false;
+    }
+    return true;
   }
 
   Offhand.tools.shape = function (args) {
@@ -174,7 +193,10 @@ Offhand.tools = Offhand.tools || {};
 
       applyShapeParams(util, layer, args);
       if (args.position !== undefined) setPosition(util, layer, args.position);
-      return readShapeInfo(util, layer);
+      var createdResult: any = readShapeInfo(util, layer);
+      createdResult.created = { id: layer.id, name: layer.name };
+      createdResult.changed = {};
+      return createdResult;
     }
 
     if (action === "set") {
@@ -182,10 +204,15 @@ Offhand.tools = Offhand.tools || {};
       if (!(target instanceof ShapeLayer)) {
         util.fail("INVALID_ARGS", 'Layer "' + target.name + '" is not a shape layer.');
       }
+      var before = readShapeInfo(util, target);
       if (args.name !== undefined) target.name = String(args.name);
       applyShapeParams(util, target, args);
       if (args.position !== undefined) setPosition(util, target, args.position);
-      return readShapeInfo(util, target);
+      var after: any = readShapeInfo(util, target);
+      var result: any = after;
+      result.changed = util.diff(before, after);
+      if (isEmpty(result.changed)) result.note = "No values changed.";
+      return result;
     }
 
     util.fail("INVALID_ARGS", 'Unknown shape action "' + action + '".', "Use get, create, or set.");

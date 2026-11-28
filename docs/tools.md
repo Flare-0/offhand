@@ -31,7 +31,7 @@ Returns:
 ```json
 {
   "connected": true,
-  "bridge": { "panelVersion": "0.1.0", "connectedAt": "…" },
+  "bridge": { "panelVersion": "0.2.0", "connectedAt": "…" },
   "afterEffects": {
     "version": "23.6.0",
     "project": { "name": "Untitled", "path": null, "dirty": false, "items": 4 },

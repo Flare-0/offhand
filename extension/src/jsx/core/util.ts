@@ -29,12 +29,22 @@ Offhand.util =
       orientation: "ADBE Orientation",
     };
 
+    // Assign the enum constant rather than a raw number: newer AE builds
+    // reject numeric literals on TextDocument.justification with "The enum
+    // is of the incorrect type".
     var JUSTIFY = {
-      left: 0,
-      center: 1,
-      right: 2,
-      justify: 3,
-      full: 3,
+      left: "LEFT_JUSTIFY",
+      center: "CENTER_JUSTIFY",
+      right: "RIGHT_JUSTIFY",
+      justify: "FULL_JUSTIFY",
+      full: "FULL_JUSTIFY",
+    };
+
+    var JUSTIFY_FALLBACK = {
+      LEFT_JUSTIFY: 0,
+      CENTER_JUSTIFY: 1,
+      RIGHT_JUSTIFY: 2,
+      FULL_JUSTIFY: 3,
     };
 
     function fail(code, message, hint) {
@@ -535,6 +545,8 @@ Offhand.util =
       if (type === PropertyValueType.NO_VALUE) return "group";
       if (type === PropertyValueType.ThreeD_SPATIAL) return "3d";
       if (type === PropertyValueType.TwoD_SPATIAL) return "2d";
+      if (type === PropertyValueType.ThreeD) return "3d";
+      if (type === PropertyValueType.TwoD) return "2d";
       if (type === PropertyValueType.OneD) return "number";
       if (type === PropertyValueType.COLOR) return "color";
       if (type === PropertyValueType.CUSTOM_VALUE) return "custom";
@@ -555,13 +567,28 @@ Offhand.util =
         else justify = "justify";
       }
 
+      // AE throws "this text has no stroke" / "no fill" when reading a color
+      // that is not applied, so read each one defensively.
+      var fillHex = null;
+      try {
+        if (doc.applyFill !== false) fillHex = rgbHex(doc.fillColor);
+      } catch (fillError) {
+        fillHex = null;
+      }
+      var strokeHex = null;
+      try {
+        if (doc.applyStroke === true) strokeHex = rgbHex(doc.strokeColor);
+      } catch (strokeError) {
+        strokeHex = null;
+      }
+
       return {
         text: doc.text,
         font: doc.font,
         size: round(doc.fontSize, 3),
-        color: rgbHex(doc.fillColor),
+        color: fillHex,
         applyFill: doc.applyFill,
-        strokeColor: rgbHex(doc.strokeColor),
+        strokeColor: strokeHex,
         applyStroke: doc.applyStroke,
         strokeWidth: round(doc.strokeWidth, 2),
         tracking: round(doc.tracking, 2),
@@ -595,30 +622,51 @@ Offhand.util =
       if (updates.leading !== undefined) doc.leading = number(updates.leading, "leading");
       if (updates.justification !== undefined) {
         var key = String(updates.justification).toLowerCase();
-        var value = JUSTIFY[key];
-        if (value === undefined) {
+        var name = JUSTIFY[key];
+        if (name === undefined) {
           fail("INVALID_ARGS", 'justification "' + updates.justification + '" is not supported.', "Use left, center, right, or justify.");
         }
+        var value =
+          typeof ParagraphJustification !== "undefined" &&
+          ParagraphJustification &&
+          ParagraphJustification[name] !== undefined
+            ? ParagraphJustification[name]
+            : JUSTIFY_FALLBACK[name];
         doc.justification = value;
       }
-      if (updates.fauxBold !== undefined) doc.fauxBold = !!updates.fauxBold;
-      if (updates.fauxItalic !== undefined) doc.fauxItalic = !!updates.fauxItalic;
-      if (updates.allCaps !== undefined) doc.allCaps = !!updates.allCaps;
+      // TextDocument exposes fauxBold/fauxItalic/allCaps as read-only on
+      // current AE builds, so reject them explicitly instead of throwing a
+      // raw "readOnly attribute" error mid-write.
+      if (updates.fauxBold !== undefined) {
+        fail("INVALID_ARGS", '"fauxBold" is read-only in After Effects.', 'Use a bold font instead, e.g. font="Arial-BoldMT".');
+      }
+      if (updates.fauxItalic !== undefined) {
+        fail("INVALID_ARGS", '"fauxItalic" is read-only in After Effects.', 'Use an italic font instead, e.g. font="Arial-ItalicMT".');
+      }
+      if (updates.allCaps !== undefined) {
+        fail("INVALID_ARGS", '"allCaps" is read-only in After Effects.', "Type the text in capitals instead.");
+      }
 
       return doc;
     }
 
     function shapeFromPoints(points, closed) {
-      var shape = new Shape();
-      shape.vertices = [];
+      var verts = [];
       for (var i = 0; i < points.length; i += 1) {
         var point = points[i];
         if (point && typeof point === "object" && !(point instanceof Array)) {
-          shape.vertices.push([number(point.x, "x"), number(point.y, "y")]);
+          verts.push([number(point.x, "x"), number(point.y, "y")]);
         } else {
-          shape.vertices.push([number(point[0], "x"), number(point[1], "y")]);
+          verts.push([number(point[0], "x"), number(point[1], "y")]);
         }
       }
+      if (verts.length === 0) {
+        fail("INVALID_ARGS", "A shape needs at least one point.", "Pass [[x, y], ...] or {bounds: [l, t, r, b]}.");
+      }
+      // Assign once: AE rejects `shape.vertices = []` with "Value array does
+      // not have at least 1 element(s)".
+      var shape = new Shape();
+      shape.vertices = verts;
       shape.closed = closed === undefined ? true : !!closed;
       return shape;
     }
@@ -758,8 +806,23 @@ Offhand.util =
       }
 
       if (type === "custom" || type === "unknown") {
+        var raw;
         try {
-          return String(prop.value);
+          raw = prop.value;
+        } catch (rawError) {
+          return null;
+        }
+        // Some vector-shape properties (ellipse/rect Size) report a type this
+        // build does not expose but still hold a numeric vector. Return it as
+        // an array instead of stringifying it to "160,160".
+        if (raw instanceof Array) return raw;
+        if (raw !== null && typeof raw === "object" && typeof raw.length === "number") {
+          var copy = [];
+          for (var a = 0; a < raw.length; a += 1) copy.push(raw[a]);
+          return copy;
+        }
+        try {
+          return String(raw);
         } catch (customError) {
           return null;
         }
@@ -794,8 +857,30 @@ Offhand.util =
 
       if (value instanceof Array) {
         var current = prop.value;
-        var dimensions = current instanceof Array ? current.length : 1;
+        var hasCurrent =
+          current !== null &&
+          typeof current === "object" &&
+          typeof current.length === "number";
+        var dimensions = hasCurrent ? current.length : 1;
         if (value.length < dimensions) {
+          // 2D input for a 3D property is normal ([960, 540] for position).
+          // Keep the existing component for the dimensions that were omitted
+          // so scale stays 100 and position keeps its z.
+          if (value.length >= dimensions - 1 && dimensions > 1) {
+            var padded = [];
+            for (var d = 0; d < dimensions; d += 1) {
+              var component;
+              if (d < value.length) {
+                component = value[d];
+              } else if (hasCurrent && d < current.length) {
+                component = current[d];
+              } else {
+                component = 0;
+              }
+              padded[d] = number(component, prop.name);
+            }
+            return padded;
+          }
           fail(
             "INVALID_ARGS",
             '"' + prop.name + '" expects ' + dimensions + " numbers.",
@@ -803,7 +888,9 @@ Offhand.util =
           );
         }
         var output = [];
-        for (var i = 0; i < dimensions; i += 1) output.push(number(value[i], prop.name));
+        for (var i = 0; i < dimensions; i += 1) {
+          output[i] = number(value[i], prop.name);
+        }
         return output;
       }
 
@@ -828,12 +915,22 @@ Offhand.util =
 
     function setValue(prop, value, atTime) {
       var coerced = coerceValue(prop, value);
+      // A coercion that returns nothing silently no-ops in AE (`setValue` with
+      // undefined) or writes the current value (`setValueAtTime`), so fail
+      // loudly instead.
+      if (coerced === undefined || coerced === null) {
+        fail(
+          "INVALID_STATE",
+          'Could not coerce a value for "' + prop.name + '".',
+          "Pass a number or an array of numbers.",
+        );
+      }
       if (atTime === undefined || atTime === null) {
         prop.setValue(coerced);
       } else {
         prop.setValueAtTime(number(atTime, "time"), coerced);
       }
-      return prop;
+      return coerced;
     }
 
     function readKeyValue(prop, index) {
@@ -971,6 +1068,7 @@ Offhand.util =
       clampInt: clampInt,
       page: page,
       clone: clone,
+      same: same,
       diff: diff,
       track: track,
       project: project,

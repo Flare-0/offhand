@@ -44,7 +44,8 @@ Offhand.tools = Offhand.tools || {};
 
     if (action === "get") {
       var comp = util.comp(args.comp);
-      var detail = util.compInfo(comp);
+      var full = args.detail === "full";
+      var detail: any = full ? util.compInfo(comp) : compBrief(util, comp);
       detail.selectedLayers = [];
       if (comp.selectedLayers) {
         for (var i = 0; i < comp.selectedLayers.length; i += 1) {
