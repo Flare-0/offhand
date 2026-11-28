@@ -16,8 +16,13 @@ Layers are identified by a stable uid, and renders no longer hold the bridge cal
 - **`layer reorder` takes `before` or `after`** instead of a target index, and reports the new neighbor
   uids. Duplicate and delete results report uids too.
 - **`render start` and `queue { start: true }` schedule rendering** through `app.scheduleTask` and return
-  immediately with `scheduled`/`blocking` fields. `render jobs` polls the queue; queued items are adopted
-  after a panel reload, so jobs are not lost when the panel restarts.
+  immediately with `scheduled`/`blocking` fields. `render jobs` polls the queue; queue items (including
+  finished ones) are adopted after a panel reload, so history is not lost when the panel restarts.
+- **Render polling no longer waits behind After Effects.** The scheduled script writes a temp status
+  marker; while it says `rendering`, the MCP server answers `jobs`/`status` from the last known state
+  without a bridge call. A finished or missing marker resumes live queue polling.
+- The scheduled render runs inside `app.beginSuppressDialogs()` so a completion or error alert cannot
+  block the ExtendScript engine.
 - `render clear` refuses while a render is active and marks both queued and rendering jobs failed when it
   does run.
 - Tool results can no longer emit `text: undefined` when a handler returns nothing.
@@ -28,9 +33,9 @@ Layers are identified by a stable uid, and renders no longer hold the bridge cal
 
 ### Tests
 
-- 10 files / 96 tests, including uid selectors, reorder by neighbor, parent uids, render scheduling,
-  render-queue adoption after a reload, clear-while-rendering, property expressions/keyframe removal,
-  project save/open, and assets removal.
+- 11 files / 100 tests, including uid selectors, reorder by neighbor, parent uids, render scheduling,
+  render-queue adoption after a reload, cached polling during a render, clear-while-rendering, property
+  expressions/keyframe removal, project save/open, and assets removal.
 
 ## [0.2.0] — 2026-11-28
 

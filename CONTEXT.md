@@ -78,8 +78,10 @@ Target: **After Effects 2023+** (`AEFT [23.0,99.9]`). Windows only in practice; 
   nest, shares one undo group, and the panel's security gate scans the call list for `execute` — so the
   raw-script switch cannot be bypassed by packing it into a batch.
 - **Render jobs survive panel reloads:** `render queue` records a job, `start` schedules
-  `rq.render()` through `app.scheduleTask` and returns, queued items are adopted from the render queue,
-  and `jobs` reports state. Long renders still occupy AE once the scheduled task begins.
+  `rq.render()` through `app.scheduleTask` and returns, queue items (including finished ones) are adopted,
+  and `jobs` reports state. The scheduled script writes a temp status marker; while it says
+  `rendering`, `jobs`/`status` are answered from cached state without touching AE. Dialogs are
+  suppressed around the render. Long renders still occupy AE once the scheduled task begins.
 - **The typed surface grows from evidence:** `offhand patterns` groups repeated `execute` reasons from
   `usage.jsonl` and suggests the tool that should absorb them.
 
@@ -108,7 +110,7 @@ produced shipped in 0.2.0: runtime `RQItemStatus` labels, MP4/H.264 queue defaul
 crashes and justification, read-only text attributes, shape fill target and `comp get` brevity. Render
 was verified end to end (valid 32 KB MP4, PNG frame).
 
-Checks: `typecheck` ✓ · **84 tests / 10 files** ✓ · `lint` ✓ · `build` ✓ · extension build ✓
+Checks: `typecheck` ✓ · **100 tests / 11 files** ✓ · `lint` ✓ · `build` ✓ · extension build ✓
 (250.98 kB panel bundle; expected `eval` warnings from `core/json.ts` and `tools/execute.ts`). The
 suite includes a mock AE object model (`tests/support/ae-mock.ts`), so every typed tool runs end to end
 without After Effects.

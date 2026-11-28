@@ -48,7 +48,7 @@ The installer prints the exact path. Verify any time:
 node "$env:LOCALAPPDATA\offhand\app\dist\cli.js" doctor
 ```
 
-`offhand-mcp` is **not published to npm yet**, so `npx -y offhand-mcp` will 404. Use the built `dist/cli.js`.
+`offhand-mcp` is distributed as a local build, not through npm. Use the built `dist/cli.js`.
 
 ### From a clone (development)
 
@@ -141,6 +141,11 @@ the result includes a `note` instead of silently writing a file whose contents d
 extension. Render-queue status names are read from the installed build's `RQItemStatus` constants, so
 they stay correct across AE versions.
 
+`render start` schedules the render and returns immediately. While After Effects is rendering, `render
+jobs` and `render status` answer from a temp marker instead of waiting on AE's single-threaded scripting
+engine, so polling stays fast even for long renders. Queue items, including finished renders, are adopted
+after a panel reload.
+
 ## Tools
 
 | Tool | Purpose |
@@ -179,7 +184,7 @@ task-shaped walkthroughs.
 ```powershell
 npm run dev              # rebuild the MCP server on change
 npm run typecheck
-npm test                 # 6 files / 29 tests
+npm test                 # 11 files / 100 tests
 npm run lint
 npm run build
 npm run build:extension  # CEP panel + ES3 ExtendScript bundle

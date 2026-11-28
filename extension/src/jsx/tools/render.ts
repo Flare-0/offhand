@@ -230,15 +230,56 @@ Offhand.tools = Offhand.tools || {};
     }
   }
 
+  // The server polls this marker instead of calling into the panel while AE is
+  // rendering. ExtendScript is single-threaded, so a queued call would block
+  // (and can sit behind a native dialog) until the render finishes.
+  function createStatusFile() {
+    try {
+      var folder = new Folder(Folder.temp.fsName + "/offhand");
+      if (!folder.exists) folder.create();
+      var path =
+        folder.fsName + "/render-" + now() + "-" + Math.round(Math.random() * 1000000) + ".status";
+      var file = new File(path);
+      file.open("w");
+      file.write("rendering");
+      file.close();
+      return path;
+    } catch (statusError) {
+      return null;
+    }
+  }
+
+  function scriptPath(path) {
+    return String(path).replace(/\\/g, "/").replace(/"/g, '\\"');
+  }
+
   // app.scheduleTask returns to the caller before AE starts rendering, so a
-  // long render cannot exceed the bridge deadline. If scheduling is not
-  // available, fall back to the old blocking path.
+  // long render cannot exceed the bridge deadline. beginSuppressDialogs keeps
+  // a completion or error alert from blocking every later ExtendScript call.
+  // If scheduling is not available, fall back to the old blocking path.
   function scheduleRender(util, rq, jobs) {
     markRendering(jobs);
+    var statusFile = createStatusFile();
     if (typeof app.scheduleTask === "function") {
       try {
-        app.scheduleTask("app.project.renderQueue.render()", 100, false);
-        return true;
+        var script = "";
+        if (statusFile) {
+          script =
+            '(function(){var result="done";' +
+            "try{app.beginSuppressDialogs();}catch(e){}" +
+            "try{app.project.renderQueue.render();}catch(e){result=\"error\";}" +
+            "try{app.endSuppressDialogs(false);}catch(e){}" +
+            "try{var f=new File(\"" + scriptPath(statusFile) + "\");" +
+            'f.open("w");f.write(result);f.close();}catch(e){}' +
+            "})()";
+        } else {
+          script =
+            '(function(){try{app.beginSuppressDialogs();}catch(e){}' +
+            "try{app.project.renderQueue.render();}catch(e){}" +
+            "try{app.endSuppressDialogs(false);}catch(e){}})()";
+        }
+        app.scheduleTask(script, 100, false);
+        return { scheduled: true, statusFile: statusFile };
       } catch (scheduleError) {
         // fall through to synchronous rendering
       }
@@ -255,7 +296,7 @@ Offhand.tools = Offhand.tools || {};
       }
     }
     for (var k = 0; k < jobs.length; k += 1) syncJob(jobs[k], rq);
-    return false;
+    return { scheduled: false, statusFile: null };
   }
 
   function outputForItem(item) {
@@ -305,7 +346,9 @@ Offhand.tools = Offhand.tools || {};
 
     if (action === "status") {
       if (!rq) util.fail("INVALID_STATE", "No render queue available.");
-      adoptQueueJobs(util, rq, true);
+      // Adopt every queue item, including finished ones, so job history survives
+      // a panel reload instead of disappearing with Offhand.jobs.
+      adoptQueueJobs(util, rq, false);
       syncAll(rq);
       var statusOut = queueStatus(util, rq);
       statusOut.jobs = jobSummary(Offhand.jobs);
@@ -314,7 +357,7 @@ Offhand.tools = Offhand.tools || {};
 
     if (action === "jobs") {
       if (!rq) util.fail("INVALID_STATE", "No render queue available.");
-      adoptQueueJobs(util, rq, true);
+      adoptQueueJobs(util, rq, false);
       syncAll(rq);
       return { total: Offhand.jobs.length, jobs: jobSummary(Offhand.jobs), queue: queueStatus(util, rq) };
     }
@@ -415,9 +458,9 @@ Offhand.tools = Offhand.tools || {};
       }
 
       var job = recordJob(targetComp, outputPath, queueIndexFor(util, rq, rqItem));
-      var scheduled = false;
+      var startInfo = { scheduled: false, statusFile: null };
       if (args.start === true) {
-        scheduled = scheduleRender(util, rq, [job]);
+        startInfo = scheduleRender(util, rq, [job]);
       }
       var queuedOut: any = queueStatus(util, rq);
       queuedOut.job = jobInfo(job);
@@ -435,10 +478,11 @@ Offhand.tools = Offhand.tools || {};
         }
       }
       if (args.start === true) {
-        queuedOut.scheduled = scheduled;
-        queuedOut.blocking = !scheduled;
+        queuedOut.scheduled = startInfo.scheduled;
+        queuedOut.blocking = !startInfo.scheduled;
+        queuedOut.statusFile = startInfo.statusFile;
         notes.push(
-          scheduled
+          startInfo.scheduled
             ? 'Rendering is scheduled in After Effects; poll action="jobs" for completion.'
             : "Rendering ran synchronously.",
         );
@@ -487,13 +531,14 @@ Offhand.tools = Offhand.tools || {};
           'Call render with action="queue" (and maybe comp/path) first, or action="jobs" to inspect the queue.',
         );
       }
-      var scheduled = scheduleRender(util, rq, pending);
+      var startInfo = scheduleRender(util, rq, pending);
       var startedOut: any = queueStatus(util, rq);
       startedOut.started = true;
-      startedOut.scheduled = scheduled;
-      startedOut.blocking = !scheduled;
+      startedOut.scheduled = startInfo.scheduled;
+      startedOut.blocking = !startInfo.scheduled;
+      startedOut.statusFile = startInfo.statusFile;
       startedOut.jobs = jobSummary(pending);
-      startedOut.note = scheduled
+      startedOut.note = startInfo.scheduled
         ? 'Rendering is scheduled in After Effects; poll action="jobs" for completion.'
         : "Rendering ran synchronously.";
       return startedOut;

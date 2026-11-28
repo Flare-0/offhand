@@ -1,8 +1,35 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { textResult } from './result.js';
 import type { ToolDefinition } from './types.js';
 
 const selector = z.union([z.number(), z.string()]);
+
+type PendingRender = {
+  statusFile: string;
+  response: Record<string, unknown>;
+  startedAt: number;
+};
+
+// The host writes this marker before scheduling a render and overwrites it when
+// AE finishes. While it says "rendering", answering status/jobs from this cache
+// avoids a bridge call that would block on AE's single-threaded script engine.
+// The age guard keeps a marker orphaned by an AE crash from masking the bridge
+// forever.
+const PENDING_MAX_MS = 12 * 60 * 60 * 1000;
+let pendingRender: PendingRender | null = null;
+
+function statusFileState(path: string): 'rendering' | 'done' | 'error' | 'missing' {
+  try {
+    if (!existsSync(path)) return 'missing';
+    const text = readFileSync(path, 'utf8').trim().toLowerCase();
+    if (text.startsWith('done')) return 'done';
+    if (text.startsWith('error')) return 'error';
+    return 'rendering';
+  } catch {
+    return 'missing';
+  }
+}
 
 export const renderTool: ToolDefinition = {
   name: 'render',
@@ -63,7 +90,36 @@ export const renderTool: ToolDefinition = {
     openWorldHint: false,
   },
   async handler(args, context) {
+    const action = String(args.action ?? 'status');
+    if (pendingRender && (action === 'jobs' || action === 'status')) {
+      const bridgeState =
+        typeof context.bridge.status === 'function' ? context.bridge.status().state : 'ready';
+      const expired = Date.now() - pendingRender.startedAt > PENDING_MAX_MS;
+      const state = statusFileState(pendingRender.statusFile);
+      if (state === 'rendering' && bridgeState === 'ready' && !expired) {
+        return textResult({
+          ...pendingRender.response,
+          rendering: true,
+          note: 'After Effects is still rendering; this is the last known state. Call again shortly.',
+        });
+      }
+      pendingRender = null;
+    }
+
     const data = await context.bridge.call('render', args, { timeoutMs: 120_000 });
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      const record = data as Record<string, unknown>;
+      const statusFile = record.statusFile;
+      delete record.statusFile;
+      if (
+        typeof statusFile === 'string' &&
+        statusFile.length > 0 &&
+        (action === 'start' || (action === 'queue' && args.start === true))
+      ) {
+        pendingRender = { statusFile, response: record, startedAt: Date.now() };
+      }
+      if (action === 'clear') pendingRender = null;
+    }
     return textResult(data);
   },
 };

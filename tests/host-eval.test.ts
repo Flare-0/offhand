@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { installAeMock } from "./support/ae-mock";
@@ -337,10 +337,24 @@ describe("render", () => {
     expect(started.data.started).toBe(true);
     expect(started.data.scheduled).toBe(true);
     expect(started.data.blocking).toBe(false);
+    expect(typeof started.data.statusFile).toBe("string");
+    expect(existsSync(started.data.statusFile)).toBe(true);
+    expect(readFileSync(started.data.statusFile, "utf8").trim()).toBe("rendering");
     ae.runScheduled();
     const status = run("render", { action: "status" });
     expect(status.data.items[0].statusName).toBe("DONE");
     expect(status.data.items[0].state).toBe("done");
+  });
+
+  it("keeps finished job history after the panel loses its memory", () => {
+    run("render", { action: "queue", comp: "Main", output: work("history.mp4") });
+    run("render", { action: "start" });
+    ae.runScheduled();
+    Offhand.jobs = [];
+    const jobs = run("render", { action: "jobs" });
+    expect(jobs.data.total).toBe(1);
+    expect(jobs.data.jobs[0].status).toBe("done");
+    expect(jobs.data.jobs[0].output).toContain("history.mp4");
   });
 
   it("starts queued items after the panel loses its job memory", () => {
@@ -360,6 +374,9 @@ describe("render", () => {
     expect(queued.data.scheduled).toBe(true);
     expect(queued.data.blocking).toBe(false);
     expect(queued.data.job.status).toBe("rendering");
+    expect(typeof queued.data.statusFile).toBe("string");
+    expect(existsSync(queued.data.statusFile)).toBe(true);
+    expect(readFileSync(queued.data.statusFile, "utf8").trim()).toBe("rendering");
     ae.runScheduled();
     expect(run("render", { action: "jobs" }).data.jobs[0].status).toBe("done");
   });

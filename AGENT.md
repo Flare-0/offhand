@@ -5,7 +5,7 @@
 
 ## What this project is
 
-**offhand** (`offhand-mcp` on npm) is an MCP server for Adobe After Effects on Windows.
+**offhand** (`offhand-mcp`) is an MCP server for Adobe After Effects on Windows.
 It lets an AI agent control After Effects through typed, high-level tools — without writing ExtendScript 95% of the time.
 
 Repo: `git@flare:Flare-0/offhand.git` (private, SSH alias `flare` → github.com, account Flare-0)
@@ -162,9 +162,9 @@ loads the bundle once, so rebuild + reload the panel (flyout menu) or restart AE
 **Next phase: D — port `extension/host/**/*.jsx` to `extension/src/jsx/**/*.ts`** (typed handlers,
 still called through `evalTS`; undo groups preserved).
 
-**Important:** `offhand-mcp` is **not published** (`npm view offhand-mcp version` → 404). MCP clients
-must run `node D:/Projects/offhand/dist/cli.js`. Also: after rebuilding `dist/cli.js`, the MCP client must
-be restarted (in OpenCode, remove + re-add the server entry) — it keeps running the old code otherwise.
+**Important:** `offhand-mcp` is distributed as a local build, not through npm. MCP clients must run
+`node D:/Projects/offhand/dist/cli.js`. Also: after rebuilding `dist/cli.js`, the MCP client must be
+restarted (in OpenCode, remove + re-add the server entry) — it keeps running the old code otherwise.
 
 ### ✅ Phase D done (2026-11-25) — host ported into `src/jsx`
 
@@ -216,8 +216,10 @@ The tools now behave like an agent surface rather than API wrappers. All of this
   batch with `EXECUTE_DISABLED`.
 - **Render jobs.** `Offhand.jobs` (`j1`, `j2`, …) with `queued|rendering|done|failed`, `queuedAt`,
   `startedAt`, `finishedAt`, `ms`, `error`; `syncJob` maps AE queue status strings. Actions:
-  `frame`, `queue` (+`start:true`), `start`, `jobs`, `status`, `clear`. `start` calls the blocking
-  `rq.render()` — be honest with users about that.
+  `frame`, `queue` (+`start:true`), `start`, `jobs`, `status`, `clear`. `start` schedules
+  `rq.render()` through `app.scheduleTask` and returns immediately. The scheduled script writes a temp
+  status marker; while it says `rendering`, the server answers `jobs`/`status` from the last known
+  state without a bridge call. Queue items, including finished renders, are adopted after a panel reload.
 - **Execute promotion.** `src/server/log.ts` exports `readExecutePatterns(limit)` and
   `suggestTool(reason)`, grouping by normalised `reason` (the logged script is replaced by
   `<N chars>`). `offhand patterns` prints them; `docs/tools.md` documents the promotion loop.
@@ -225,10 +227,10 @@ The tools now behave like an agent surface rather than API wrappers. All of this
   `extension/src/jsx/tools/` (the `.jsx` fallback is no longer the contract); new
   `tests/patterns.test.ts`, `tests/host-eval.test.ts`, `tests/host-property.test.ts`,
   `tests/host-assets.test.ts`, `tests/support/ae-mock.ts` and `tests/versions.test.ts`.
-  **10 files / 84 tests.** Versions bumped to 0.2.0 in root, extension,
-  `src/shared/version.ts` and `core/state.ts`.
+  **11 files / 100 tests.** Versions are 0.3.0 in root, extension, `src/shared/version.ts` and
+  `core/state.ts`.
 
-**Checks:** `typecheck`, `test` (10/84), `lint`, `build` (74.6 KB cli), `build:extension`
+**Checks:** `typecheck`, `test` (11/100), `lint`, `build` (76.5 KB cli), `build:extension`
 (251 KB panel) all green; `eval` warnings from `core/json.ts` / `tools/execute.ts` are expected.
 
 **Live AE pass complete (2026-11-28, AE 23.6x62).** Every one of the 15 tools was exercised through the

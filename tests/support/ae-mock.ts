@@ -779,6 +779,14 @@ export class MockFile {
     return existsSync(this.fsName);
   }
 
+  open(): boolean {
+    return true;
+  }
+
+  close(): boolean {
+    return true;
+  }
+
   write(text: string): void {
     mkdirSync(this.parent.fsName, { recursive: true });
     writeFileSync(this.fsName, text);
@@ -1068,7 +1076,7 @@ export function installAeMock(): MockAe {
     PlaceholderSource,
     ImportOptions,
     File: MockFile,
-    Folder: Object.assign(MockFolderPath, { temp: new MockFolderPath(process.cwd()) }),
+    Folder: Object.assign(MockFolderPath, { temp: new MockFolderPath(tmpdir()) }),
   };
 
   for (const [key, value] of Object.entries(globals)) {
@@ -1111,3 +1119,4 @@ export function installAeMock(): MockAe {
 }
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
